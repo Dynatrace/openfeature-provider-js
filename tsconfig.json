@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@dynatrace/openfeature-provider-web": ["./packages/web/src"]
+    }
+  },
+  "references": []
+}
