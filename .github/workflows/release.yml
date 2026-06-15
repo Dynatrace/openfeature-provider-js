@@ -37,7 +37,7 @@ jobs:
     permissions:
       id-token: write # OIDC token for npm trusted publishing
       contents: read
-    if: ${{ fromJSON(needs.release-please.outputs.releases_created || false) }}
+    if: needs.release-please.outputs.releases_created == 'true'
     strategy:
       matrix:
         package: ${{ fromJSON(needs.release-please.outputs.paths_released) }}
