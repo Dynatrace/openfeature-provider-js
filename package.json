@@ -1,0 +1,50 @@
+{
+  "name": "@dynatrace/openfeature-provider-js",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Dynatrace OpenFeature providers for JavaScript",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "vitest run --passWithNoTests",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dynatrace/openfeature-provider-js.git"
+  },
+  "keywords": [
+    "OpenFeature",
+    "Dynatrace",
+    "feature-flags",
+    "feature",
+    "flags",
+    "toggles",
+    "experimentation",
+    "OFREP",
+    "flagd"
+  ],
+  "author": "Dynatrace",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/Dynatrace/openfeature-provider-js/issues"
+  },
+  "homepage": "https://github.com/Dynatrace/openfeature-provider-js#readme",
+  "workspaces": [
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@openfeature/web-sdk": "^1.8.0",
+    "esbuild": "^0.25.0",
+    "husky": "^9.1.7",
+    "jsdom": "^29.1.1",
+    "lint-staged": "^17.0.4",
+    "prettier": "^3.8.3",
+    "rollup": "^4.0.0",
+    "rollup-plugin-dts": "^6.1.1",
+    "shx": "^0.4.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.0.0"
+  }
+}
