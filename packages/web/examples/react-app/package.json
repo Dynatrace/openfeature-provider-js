@@ -1,0 +1,25 @@
+{
+  "name": "dynatrace-openfeature-react-example",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Example React app showing how to use the local @dynatrace/openfeature-provider-web with the OpenFeature Web SDK.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@dynatrace/openfeature-provider-web": "file:../..",
+    "@openfeature/web-sdk": "^1.8.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.13"
+  }
+}

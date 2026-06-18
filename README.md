@@ -15,9 +15,9 @@ npm run format
 
 ## Packages
 
-| Package             | Description                                                                                                                                   |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| _Coming in Phase 2_ | `@dynatrace/openfeature-provider-web` will be migrated from [openfeature-provider-web](https://github.com/Dynatrace/openfeature-provider-web) |
+| Package                               | Description                          |
+| ------------------------------------- | ------------------------------------ |
+| `@dynatrace/openfeature-provider-web` | OpenFeature provider for web (OFREP) |
 
 ## License
 
