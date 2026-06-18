@@ -1,5 +1,5 @@
-import { StandardResolutionReasons } from '@openfeature/web-sdk';
-import type { EvaluationDetails, FlagValue, Hook, HookContext } from '@openfeature/web-sdk';
+import { StandardResolutionReasons } from '@openfeature/core';
+import type { EvaluationDetails, FlagValue, BaseHook, HookContext } from '@openfeature/core';
 
 const TIMESTAMP_FLOOR_SEC = 10;
 
@@ -70,7 +70,7 @@ export interface FlushPayload {
   evaluations: FlushRecord[];
 }
 
-export class EvaluationMetricsHook implements Hook {
+export class EvaluationMetricsHook implements BaseHook {
   private readonly _metricsEndpoint: string;
   private _aggregateMap: Map<string, Map<string, number>> = new Map();
   private _distinctKeyCount = 0;

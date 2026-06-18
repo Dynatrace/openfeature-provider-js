@@ -15,9 +15,11 @@ npm run format
 
 ## Packages
 
-| Package                               | Description                          |
-| ------------------------------------- | ------------------------------------ |
-| `@dynatrace/openfeature-provider-web` | OpenFeature provider for web (OFREP) |
+| Package                                                 | Description                                     |
+| ------------------------------------------------------- | ----------------------------------------------- |
+| [`@dynatrace/openfeature-provider-web`](./packages/web) | Dynatrace OpenFeature provider for web browsers |
+
+Internal (not published): `packages/shared` (evaluation metrics hook, bundled into providers).
 
 ## License
 

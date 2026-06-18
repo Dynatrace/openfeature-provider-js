@@ -1,10 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "./src",
+    "rootDir": "..",
     "outDir": "./dist/esm",
     "declarationDir": "./dist/types"
   },
-  "include": ["./src/**/*"],
-  "exclude": ["node_modules", "dist", "./src/**/*.test.ts"]
+  "include": ["./src/**/*", "../shared/src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "./src/**/*.test.ts", "../shared/src/**/*.test.ts"]
 }

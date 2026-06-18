@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { StandardResolutionReasons } from '@openfeature/web-sdk';
+import { StandardResolutionReasons } from '@openfeature/core';
 import { EvaluationMetricsHook } from './EvaluationMetricsHook';
-import type { EvaluationDetails, FlagValue } from '@openfeature/web-sdk';
+import type { EvaluationDetails, FlagValue } from '@openfeature/core';
 import type { FlushPayload } from './EvaluationMetricsHook';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────

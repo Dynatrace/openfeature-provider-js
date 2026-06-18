@@ -10,7 +10,7 @@ import type {
   Hook,
 } from '@openfeature/web-sdk';
 import { ClientProviderEvents } from '@openfeature/web-sdk';
-import { EvaluationMetricsHook } from './EvaluationMetricsHook';
+import { EvaluationMetricsHook } from '../../shared/src/EvaluationMetricsHook.js';
 import { PACKAGE_VERSION } from './version';
 
 export interface DynatraceProviderOptions {
