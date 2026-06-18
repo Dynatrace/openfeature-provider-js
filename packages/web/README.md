@@ -21,10 +21,22 @@ yarn add @dynatrace/openfeature-provider-web @openfeature/web-sdk @openfeature/c
 
 ## Configuration
 
-| Option         | Type     | Required | Default         | Description                                                                                                                                                                  |
-| -------------- | -------- | -------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sdkKey`       | `string` | ✅       | —               | Dynatrace SDK key (e.g. `dt01.web_us_…`). The region segment determines the OFREP endpoint; the full key is sent as the `Authorization` header.                              |
-| `pollInterval` | `number` | ❌       | `-1` (disabled) | How often (ms) the provider polls for updated flags. Set to `-1` or omit to rely solely on context-change refetches. The minimum polling interval that can be set is 1000ms. |
+The provider is constructed with the SDK key as the first argument and optional
+overrides as the second:
+
+```ts
+new DynatraceProvider(sdkKey, options?);
+```
+
+| Option            | Type     | Default          | Description                                                                                                                                                                  |
+| ----------------- | -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiOrigin`       | `string` | derived from key | Override the OFREP API origin. When omitted, derived from the `geo` segment of the SDK key.                                                                                  |
+| `metricsUrl`      | `string` | derived from key | Override the metrics ingest endpoint. When omitted, derived from the SDK key geo.                                                                                            |
+| `pollInterval`    | `number` | `-1` (disabled)  | How often (ms) the provider polls for updated flags. Set to `-1` or omit to rely solely on context-change refetches. The minimum polling interval that can be set is 1000ms. |
+| `flushIntervalMs` | `number` | `30_000`         | How often accumulated evaluation metrics are flushed. Values between 0 and 999 are clamped to 1000ms. Pass a negative number to disable periodic flushing.                   |
+| `maxCapacity`     | `number` | `5_000`          | Maximum number of distinct aggregate-map entries before a capacity flush is triggered.                                                                                       |
+
+The SDK key (e.g. `dt01.web_us_…`) is required as the first constructor argument. The region segment determines the OFREP and metrics endpoints; the full key is sent as the `Authorization` header.
 
 ---
 
@@ -36,9 +48,7 @@ yarn add @dynatrace/openfeature-provider-web @openfeature/web-sdk @openfeature/c
 import { OpenFeature } from '@openfeature/web-sdk';
 import { DynatraceProvider } from '@dynatrace/openfeature-provider-web';
 
-const provider = new DynatraceProvider({
-  sdkKey: 'dt01.web_us_…',
-});
+const provider = new DynatraceProvider('dt01.web_us_…');
 
 // Set evaluation context before registering the provider so the initial
 // bulk evaluation includes targeting information.
@@ -68,8 +78,7 @@ Pass a `pollInterval` (in milliseconds) to have the provider re-fetch flags
 on a timer in addition to context-change triggers.
 
 ```ts
-const provider = new DynatraceProvider({
-  sdkKey: 'dt01.web_us_…',
+const provider = new DynatraceProvider('dt01.web_us_…', {
   pollInterval: 60_000, // refresh every 60 seconds
 });
 ```

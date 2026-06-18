@@ -207,10 +207,8 @@ export default function FeatureFlagDemo() {
             <td>
               <code>region-config-api-origin</code>
             </td>
-            <td>object</td>
-            <td>
-              <pre className="object-value">{JSON.stringify(regionConfigApiOrigin, null, 2)}</pre>
-            </td>
+            <td>string</td>
+            <td>{regionConfigApiOrigin}</td>
             <td>{regionConfigApiOriginDetails.variant ?? '–'}</td>
             <td>{regionConfigApiOriginDetails.reason ?? '–'}</td>
           </tr>

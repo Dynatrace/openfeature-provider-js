@@ -82,7 +82,7 @@ To enable periodic re-evaluation, pass `pollInterval` (milliseconds) to the
 provider in `src/main.tsx`:
 
 ```ts
-new DynatraceProvider({ sdkKey, pollInterval: 60_000 }); // refresh every 60 s
+new DynatraceProvider(sdkKey, { pollInterval: 60_000 }); // refresh every 60 s
 ```
 
 The `FeatureFlagDemo` component already subscribes to

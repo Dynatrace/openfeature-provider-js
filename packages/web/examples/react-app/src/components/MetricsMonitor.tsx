@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { OpenFeature } from '@openfeature/web-sdk';
 
 interface FlushRecord {
@@ -28,11 +28,71 @@ interface FlushEntry {
 
 let _entryId = 0;
 
+function isMetricsUrl(url: string): boolean {
+  try {
+    return new URL(url, window.location.href).pathname.endsWith('/v1/metrics');
+  } catch {
+    return false;
+  }
+}
+
 export default function MetricsMonitor() {
   const [flushes, setFlushes] = useState<FlushEntry[]>([]);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const originalFetch = useRef<typeof fetch | null>(null);
-  const originalSendBeacon = useRef<typeof navigator.sendBeacon | null>(null);
+
+  useEffect(() => {
+    function recordFlush(method: 'fetch' | 'beacon', body: string) {
+      try {
+        const payload = JSON.parse(body) as FlushPayload;
+        setFlushes((prev) => [
+          {
+            id: ++_entryId,
+            timestamp: new Date().toLocaleTimeString(),
+            method,
+            payload,
+          },
+          ...prev,
+        ]);
+      } catch {
+        // Ignore non-JSON bodies.
+      }
+    }
+
+    const originalFetch = globalThis.fetch.bind(globalThis);
+    const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+
+      if (method === 'POST' && typeof init?.body === 'string' && isMetricsUrl(url)) {
+        recordFlush('fetch', init.body);
+      }
+
+      return originalFetch(input, init);
+    };
+
+    navigator.sendBeacon = (url: string | URL, data?: BodyInit | null) => {
+      const urlStr = String(url);
+
+      if (isMetricsUrl(urlStr) && data != null) {
+        if (typeof data === 'string') {
+          recordFlush('beacon', data);
+        } else if (data instanceof Blob) {
+          void data.text().then((body) => recordFlush('beacon', body));
+        } else if (data instanceof ArrayBuffer) {
+          recordFlush('beacon', new TextDecoder().decode(data));
+        }
+      }
+
+      return originalSendBeacon(url, data);
+    };
+
+    return () => {
+      globalThis.fetch = originalFetch;
+      navigator.sendBeacon = originalSendBeacon;
+    };
+  }, []);
 
   function toggleExpanded(id: number) {
     setExpanded((prev) => {
@@ -55,8 +115,8 @@ export default function MetricsMonitor() {
         </button>
       </div>
       <p className="hint">
-        Intercepts payloads sent to <code>/v1/metrics/feature-flags</code>. Flushes automatically every 30 s, on context
-        change, or when the tab is hidden.
+        Intercepts payloads sent to <code>/v1/metrics</code>. Flushes automatically every 30 s, on context change, or
+        when the tab is hidden.
       </p>
 
       {flushes.length === 0 ? (

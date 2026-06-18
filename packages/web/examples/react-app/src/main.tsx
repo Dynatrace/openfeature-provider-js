@@ -8,19 +8,14 @@ import './index.css';
 
 /**
  * Set an optional `pollInterval` (ms) to keep flags fresh without a page reload:
- *   new DynatraceProvider({ sdkKey, pollInterval: 60_000 })
+ *   new DynatraceProvider(sdkKey, { pollInterval: 60_000 })
  */
 const sdkKey = import.meta.env.VITE_DT_SDK_KEY;
 
 OpenFeature.setContext(TARGETED_CONTEXT);
 
 try {
-  OpenFeature.setProvider(
-    new DynatraceProvider(sdkKey, {
-      apiOrigin: 'https://ofrep.dev.eu.fm.dynatracelabs.com',
-      metricsUrl: 'https://metrics.dev.eu.fm.dynatracelabs.com/v1/metrics',
-    }),
-  );
+  OpenFeature.setProvider(new DynatraceProvider(sdkKey));
 } catch (err) {
   console.error('[OpenFeature] Failed to register provider:', err);
 }
