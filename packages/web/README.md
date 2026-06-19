@@ -13,7 +13,7 @@ npm install @dynatrace/openfeature-provider-web @openfeature/web-sdk
 ```
 
 ```bash
-# yarn requires manual installation of the @openfeature/core peer-dependency
+# yarn requires manual installation of peer-dependencies
 yarn add @dynatrace/openfeature-provider-web @openfeature/web-sdk @openfeature/core
 ```
 
