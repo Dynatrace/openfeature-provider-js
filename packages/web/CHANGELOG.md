@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.2-alpha...openfeature-provider-web-v0.2.3-alpha) (2026-06-19)
+
+
+### ✨ New Features
+
+* migrate openfeature-provider-web into monorepo ([#4](https://github.com/Dynatrace/openfeature-provider-js/issues/4)) ([5311773](https://github.com/Dynatrace/openfeature-provider-js/commit/531177395d94dcb475d573b8c0d146a6852f5f6f))
+
 ## [0.2.2-alpha](https://github.com/Dynatrace/openfeature-provider-web/compare/v0.2.1-alpha...v0.2.2-alpha) (2026-06-01)
 
 
