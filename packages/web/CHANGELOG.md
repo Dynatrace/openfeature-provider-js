@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.3-alpha...openfeature-provider-web-v0.2.4-alpha) (2026-06-19)
+
+
+### 🐛 Bug Fixes
+
+* docs ([40ca6e3](https://github.com/Dynatrace/openfeature-provider-js/commit/40ca6e3838beefba5ef4a5ad4c69f0dd37b6ec00))
+
 ## [0.2.3-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.2-alpha...openfeature-provider-web-v0.2.3-alpha) (2026-06-19)
 
 
