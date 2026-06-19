@@ -5,5 +5,5 @@
       "@dynatrace/openfeature-provider-web": ["./packages/web/src"]
     }
   },
-  "references": []
+  "references": [{ "path": "./packages/web" }]
 }

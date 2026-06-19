@@ -1,0 +1,13 @@
+{
+  "name": "@dynatrace/openfeature-provider-shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Internal shared source for Dynatrace OpenFeature providers (not published).",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@openfeature/core": "^1.11.0"
+  }
+}

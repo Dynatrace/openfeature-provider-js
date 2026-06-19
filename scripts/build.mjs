@@ -1,23 +1,21 @@
 #!/usr/bin/env node
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
 const packages = readdirSync('packages', { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
   .map((entry) => `packages/${entry.name}`)
-  .filter((path) => existsSync(`${path}/package.json`));
+  .filter((path) => existsSync(`${path}/package.json`))
+  .filter((path) => {
+    const pkg = JSON.parse(readFileSync(`${path}/package.json`, 'utf8'));
+    return !pkg.private && typeof pkg.scripts?.build === 'string';
+  });
 
 if (packages.length === 0) {
   console.log('No packages to build.');
   process.exit(0);
 }
 
-// Shared packages must build before dependents (npm -ws order is not dependency-aware).
-const ordered = [
-  ...packages.filter((path) => path.endsWith('/core')),
-  ...packages.filter((path) => !path.endsWith('/core')),
-];
-
-for (const path of ordered) {
+for (const path of packages) {
   execFileSync('npm', ['run', 'build', '--workspace', path], { stdio: 'inherit' });
 }
