@@ -64,5 +64,5 @@ jobs:
           if npm view "$PACKAGE_NAME@$VERSION" > /dev/null 2>&1; then
             echo "$PACKAGE_NAME@$VERSION already published"
           else
-            npm publish --access public # append --provenance once our repo is public
+            npm publish --access public --tag latest # append --provenance once our repo is public
           fi
