@@ -25,6 +25,7 @@ export interface DrainedBatch {
 export class MetricsAggregator {
   private _evaluations = new Map<string, Map<string, { key: EvaluationMetricKey; count: number }>>();
   private _version = '';
+  private _bucketCount = 0;
   private readonly _gateOnVersion: boolean;
   private readonly _maxDistinctFlags: number | undefined;
 
@@ -70,6 +71,7 @@ export class MetricsAggregator {
     const existing = flagEntry.get(innerKey);
     if (existing == null) {
       flagEntry.set(innerKey, { key: metricKey, count: 1 });
+      this._bucketCount++;
     } else {
       existing.count++;
     }
@@ -92,16 +94,13 @@ export class MetricsAggregator {
 
   /** Total distinct metric buckets across all flags (web capacity threshold). */
   bucketCount(): number {
-    let count = 0;
-    for (const inner of this._evaluations.values()) {
-      count += inner.size;
-    }
-    return count;
+    return this._bucketCount;
   }
 
   drain(): DrainedBatch {
     const previous = this._evaluations;
     this._evaluations = new Map();
+    this._bucketCount = 0;
     const drainedVersion = this._version;
 
     const evaluations = new Map<string, Map<EvaluationMetricKey, number>>();

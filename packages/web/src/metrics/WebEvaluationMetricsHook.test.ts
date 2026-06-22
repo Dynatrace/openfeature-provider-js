@@ -462,6 +462,27 @@ describe('WebEvaluationMetricsHook', () => {
       hook.destroy();
     });
 
+    it('clamps flushIntervalMs of 0 to 1000ms', () => {
+      const hook = makeHook({ flushIntervalMs: 0 });
+      fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
+
+      vi.advanceTimersByTime(999);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      hook.destroy();
+    });
+
+    it('does not start periodic flush when flushIntervalMs is negative', () => {
+      const hook = makeHook({ flushIntervalMs: -1 });
+      fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
+
+      vi.advanceTimersByTime(60_000);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      hook.destroy();
+    });
+
     it('flushes after the configured interval', () => {
       const hook = makeHook({ flushIntervalMs: 30_000 });
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));

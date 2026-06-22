@@ -27,4 +27,17 @@ describe('MetricsAggregator', () => {
     agg.record('flag-b', 'off', 'STATIC', '', 1_700_000_000);
     expect(agg.flagCount()).toBe(1);
   });
+
+  it('tracks bucket count incrementally and resets on drain', () => {
+    const agg = new MetricsAggregator();
+    agg.record('flag-a', 'on', 'STATIC', '', 1_700_000_000);
+    agg.record('flag-a', 'off', 'DEFAULT', '', 1_700_000_000);
+    expect(agg.bucketCount()).toBe(2);
+
+    agg.record('flag-a', 'on', 'STATIC', '', 1_700_000_000);
+    expect(agg.bucketCount()).toBe(2);
+
+    agg.drain();
+    expect(agg.bucketCount()).toBe(0);
+  });
 });

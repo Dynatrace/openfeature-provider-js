@@ -41,7 +41,7 @@ export class WebEvaluationMetricsHook {
     this.metricsUrl = options.metricsUrl;
     this._authHeader = options.authHeader;
     const intervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
-    this._flushIntervalMs = intervalMs > 0 ? Math.max(intervalMs, MIN_FLUSH_INTERVAL_MS) : intervalMs;
+    this._flushIntervalMs = intervalMs < 0 ? intervalMs : Math.max(intervalMs, MIN_FLUSH_INTERVAL_MS);
     this._maxCapacity = options.maxCapacity ?? DEFAULT_MAX_CAPACITY;
     this._sdkType = options.sdkType;
     this._sdkVersion = options.sdkVersion;
@@ -134,7 +134,7 @@ export class WebEvaluationMetricsHook {
   }
 
   private _startPeriodicFlush(): void {
-    if (typeof setInterval === 'undefined') {
+    if (typeof setInterval === 'undefined' || this._flushIntervalMs < 0) {
       return;
     }
     this._periodicTimer = setInterval(() => this.flush(), this._flushIntervalMs);
