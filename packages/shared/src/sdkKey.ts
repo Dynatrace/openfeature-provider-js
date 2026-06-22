@@ -13,6 +13,9 @@ export interface ParsedSdkKey {
 const KEY_PATTERN =
   /^(dt[0-9]{2})\.(web|server|mobile)_([a-z]{2,})_([a-zA-Z0-9]{10,})\.([a-fA-F0-9]{32,})_([a-f0-9]{10,})$/;
 
+/** Public segment shape: {token}.{platform}_{geo}_{publicRandom} */
+const PUBLIC_KEY_PATTERN = /^(dt[0-9]{2}\.(?:web|server|mobile)_[a-z]{2,}_[a-zA-Z0-9]{10,})(?:\.|$)/;
+
 /**
  * Validates and parses a Dynatrace SDK key.
  *
@@ -21,7 +24,7 @@ const KEY_PATTERN =
  */
 export function parseSdkKey(sdkKey: string, expectedPlatform?: SdkKeyPlatform): ParsedSdkKey {
   if (sdkKey == null || sdkKey.trim() === '') {
-    throw new Error('key must not be null or blank');
+    throw new Error('[DynatraceProvider] key must not be null or blank');
   }
 
   const trimmed = sdkKey.trim();
@@ -50,14 +53,11 @@ export function parseSdkKey(sdkKey: string, expectedPlatform?: SdkKeyPlatform): 
   };
 }
 
-/** Public segment of the SDK key (everything before the last dot), safe for logs. */
+/** Public segment of the SDK key, safe for logs. */
 export function publicKey(sdkKey: string): string {
   const trimmed = sdkKey.trim();
-  const lastDot = trimmed.lastIndexOf('.');
-  if (lastDot <= 0) {
-    return '<redacted>';
-  }
-  return trimmed.substring(0, lastDot);
+  const match = PUBLIC_KEY_PATTERN.exec(trimmed);
+  return match?.[1] ?? '<redacted>';
 }
 
 /** Default Dynatrace metrics ingest URL for a geo region. */

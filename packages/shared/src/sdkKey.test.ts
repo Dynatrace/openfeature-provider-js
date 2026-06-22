@@ -24,7 +24,7 @@ describe('parseSdkKey', () => {
   });
 
   it('rejects blank keys', () => {
-    expect(() => parseSdkKey('   ')).toThrow('key must not be null or blank');
+    expect(() => parseSdkKey('   ')).toThrow('[DynatraceProvider] key must not be null or blank');
   });
 
   it('rejects a server key when web platform is expected', () => {
@@ -48,6 +48,11 @@ describe('publicKey', () => {
 
   it('returns redacted when no dot is present', () => {
     expect(publicKey('invalid')).toBe('<redacted>');
+  });
+
+  it('returns redacted for dotted strings that are not SDK keys', () => {
+    expect(publicKey('foo.bar.baz')).toBe('<redacted>');
+    expect(publicKey('dt01.notweb_us_ab3xy9kp2q.secret_hash')).toBe('<redacted>');
   });
 });
 
