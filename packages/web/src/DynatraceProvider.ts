@@ -11,7 +11,7 @@ import type {
 } from '@openfeature/web-sdk';
 import { ClientProviderEvents } from '@openfeature/web-sdk';
 import { buildMetricsUrl, parseSdkKey } from '../../shared/src/sdkKey.js';
-import { BrowserMetricsTransport } from './metrics/BrowserMetricsTransport.js';
+import { WebEvaluationMetricsHook } from './metrics/WebEvaluationMetricsHook.js';
 import { PACKAGE_VERSION } from './version';
 
 export interface DynatraceProviderOptions {
@@ -70,7 +70,7 @@ export class DynatraceProvider implements Provider {
   }
 
   private readonly _inner: OFREPWebProvider;
-  private readonly _metrics: BrowserMetricsTransport;
+  private readonly _metrics: WebEvaluationMetricsHook;
 
   /**
    * @param sdkKey  Dynatrace web SDK key (`dt01.web_{geo}_...`). Validated immediately.
@@ -89,7 +89,7 @@ export class DynatraceProvider implements Provider {
       headers: [['Authorization', `Bearer ${key}`]],
     });
 
-    this._metrics = new BrowserMetricsTransport({
+    this._metrics = new WebEvaluationMetricsHook({
       authHeader: `Bearer ${key}`,
       metricsUrl: effectiveMetricsUrl,
       flushIntervalMs,

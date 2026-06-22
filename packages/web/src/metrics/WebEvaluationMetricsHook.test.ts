@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StandardResolutionReasons } from '@openfeature/core';
-import { BrowserMetricsTransport } from './BrowserMetricsTransport';
+import { WebEvaluationMetricsHook } from './WebEvaluationMetricsHook';
+import type { FlushPayload } from '../../../shared/src/metrics/payload';
 import type { EvaluationDetails, FlagValue } from '@openfeature/core';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ function makeDetails(
 }
 
 function makeTransport(opts?: { flushIntervalMs?: number; maxCapacity?: number }) {
-  return new BrowserMetricsTransport({
+  return new WebEvaluationMetricsHook({
     authHeader: AUTH_HEADER,
     metricsUrl: MOCK_METRICS_URL,
     flushIntervalMs: opts?.flushIntervalMs ?? 30_000,
@@ -36,8 +37,8 @@ function makeTransport(opts?: { flushIntervalMs?: number; maxCapacity?: number }
   });
 }
 
-function fireFinally(transport: BrowserMetricsTransport, details: EvaluationDetails<FlagValue>): void {
-  transport.hook.finally?.({} as any, details);
+function fireFinally(hook: WebEvaluationMetricsHook, details: EvaluationDetails<FlagValue>): void {
+  hook.hook.finally?.({} as any, details);
 }
 
 function lastFetchBody(): FlushPayload {
@@ -75,7 +76,7 @@ let mockDoc: MockDoc;
 
 // ── Suite ────────────────────────────────────────────────────────────────────
 
-describe('BrowserMetricsTransport', () => {
+describe('WebEvaluationMetricsHook', () => {
   beforeEach(() => {
     vi.useFakeTimers();
 
@@ -128,7 +129,7 @@ describe('BrowserMetricsTransport', () => {
     });
 
     it('uses the provided metricsUrl override instead of the default', () => {
-      const hook = new BrowserMetricsTransport({
+      const hook = new WebEvaluationMetricsHook({
         authHeader: AUTH_HEADER,
         metricsUrl: 'https://my-proxy.example.com/v1/metrics',
         flushIntervalMs: 30_000,
@@ -143,7 +144,7 @@ describe('BrowserMetricsTransport', () => {
 
     it('sends flush requests to the overridden metricsUrl', () => {
       const customUrl = 'https://my-proxy.example.com/v1/metrics';
-      const hook = new BrowserMetricsTransport({
+      const hook = new WebEvaluationMetricsHook({
         authHeader: AUTH_HEADER,
         metricsUrl: customUrl,
         flushIntervalMs: 30_000,
@@ -163,7 +164,7 @@ describe('BrowserMetricsTransport', () => {
 
     it('sends beacon requests to the overridden metricsUrl on page hide', () => {
       const customUrl = 'https://my-proxy.example.com/v1/metrics';
-      const hook = new BrowserMetricsTransport({
+      const hook = new WebEvaluationMetricsHook({
         authHeader: AUTH_HEADER,
         metricsUrl: customUrl,
         flushIntervalMs: 30_000,

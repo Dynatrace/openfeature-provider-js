@@ -9,7 +9,7 @@ const DEFAULT_MAX_CAPACITY = 5_000;
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 1_000;
 
-export interface BrowserMetricsTransportOptions {
+export interface WebEvaluationMetricsHookOptions {
   authHeader: string;
   metricsUrl: string;
   flushIntervalMs?: number;
@@ -19,8 +19,8 @@ export interface BrowserMetricsTransportOptions {
   providerName: string;
 }
 
-/** Browser best-effort metrics delivery: periodic flush, visibility/sendBeacon, keepalive fetch. */
-export class BrowserMetricsTransport {
+/** Web best-effort metrics delivery: periodic flush, visibility/sendBeacon, keepalive fetch. */
+export class WebEvaluationMetricsHook {
   /** Metrics ingest endpoint (exposed for testing). */
   readonly metricsUrl: string;
 
@@ -37,7 +37,7 @@ export class BrowserMetricsTransport {
   private _periodicTimer: ReturnType<typeof setInterval> | undefined;
   private _visibilityHandler: (() => void) | undefined;
 
-  constructor(options: BrowserMetricsTransportOptions) {
+  constructor(options: WebEvaluationMetricsHookOptions) {
     this.metricsUrl = options.metricsUrl;
     this._authHeader = options.authHeader;
     const intervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
