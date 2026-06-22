@@ -2,7 +2,7 @@
 
 Dynatrace [OpenFeature](https://openfeature.dev/) provider for Node.js (server-side).
 
-> **Note:** This alpha package is currently a scaffold. The provider satisfies the OpenFeature server `Provider` interface, but flag evaluation is not wired yet. CDN polling and in-process evaluation via `@openfeature/flagd-core` land in upcoming PRs.
+Performs in-process flag evaluation against fm-service CDN-published config via `@openfeature/flagd-core`.
 
 ## Install
 
