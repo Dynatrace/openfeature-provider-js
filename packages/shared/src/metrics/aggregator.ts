@@ -78,9 +78,7 @@ export class MetricsAggregator {
   }
 
   setVersion(version: string | number | undefined | null): void {
-    if (version != null && String(version).trim() !== '') {
-      this._version = String(version);
-    }
+    this._version = version != null ? String(version) : '';
   }
 
   getVersion(): string {

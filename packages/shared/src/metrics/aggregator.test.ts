@@ -28,6 +28,13 @@ describe('MetricsAggregator', () => {
     expect(agg.flagCount()).toBe(1);
   });
 
+  it('clears version when set to null', () => {
+    const agg = new MetricsAggregator();
+    agg.setVersion('v1');
+    agg.setVersion(null);
+    expect(agg.getVersion()).toBe('');
+  });
+
   it('tracks bucket count incrementally and resets on drain', () => {
     const agg = new MetricsAggregator();
     agg.record('flag-a', 'on', 'STATIC', '', 1_700_000_000);
