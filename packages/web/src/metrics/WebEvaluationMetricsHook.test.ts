@@ -25,10 +25,10 @@ function makeDetails(
   };
 }
 
-function makeTransport(opts?: { flushIntervalMs?: number; maxCapacity?: number }) {
+function makeHook(opts?: { flushIntervalMs?: number; maxCapacity?: number; metricsUrl?: string }) {
   return new WebEvaluationMetricsHook({
     authHeader: AUTH_HEADER,
-    metricsUrl: MOCK_METRICS_URL,
+    metricsUrl: opts?.metricsUrl ?? MOCK_METRICS_URL,
     flushIntervalMs: opts?.flushIntervalMs ?? 30_000,
     maxCapacity: opts?.maxCapacity ?? 5_000,
     sdkType: 'web',
@@ -124,35 +124,19 @@ describe('WebEvaluationMetricsHook', () => {
 
   describe('metrics endpoint', () => {
     it('uses the configured metrics endpoint', () => {
-      const hook = makeTransport();
-      expect((hook as any).metricsUrl).toBe(MOCK_METRICS_URL);
+      const hook = makeHook();
+      expect(hook.metricsUrl).toBe(MOCK_METRICS_URL);
     });
 
     it('uses the provided metricsUrl override instead of the default', () => {
-      const hook = new WebEvaluationMetricsHook({
-        authHeader: AUTH_HEADER,
-        metricsUrl: 'https://my-proxy.example.com/v1/metrics',
-        flushIntervalMs: 30_000,
-        maxCapacity: 5_000,
-        sdkType: 'web',
-        sdkVersion: '0.0.0-test',
-        providerName: 'dynatrace',
-      });
-      expect((hook as any).metricsUrl).toBe('https://my-proxy.example.com/v1/metrics');
+      const hook = makeHook({ metricsUrl: 'https://my-proxy.example.com/v1/metrics' });
+      expect(hook.metricsUrl).toBe('https://my-proxy.example.com/v1/metrics');
       hook.destroy();
     });
 
     it('sends flush requests to the overridden metricsUrl', () => {
       const customUrl = 'https://my-proxy.example.com/v1/metrics';
-      const hook = new WebEvaluationMetricsHook({
-        authHeader: AUTH_HEADER,
-        metricsUrl: customUrl,
-        flushIntervalMs: 30_000,
-        maxCapacity: 5_000,
-        sdkType: 'web',
-        sdkVersion: '0.0.0-test',
-        providerName: 'dynatrace',
-      });
+      const hook = makeHook({ metricsUrl: customUrl });
 
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       hook.flush();
@@ -164,15 +148,7 @@ describe('WebEvaluationMetricsHook', () => {
 
     it('sends beacon requests to the overridden metricsUrl on page hide', () => {
       const customUrl = 'https://my-proxy.example.com/v1/metrics';
-      const hook = new WebEvaluationMetricsHook({
-        authHeader: AUTH_HEADER,
-        metricsUrl: customUrl,
-        flushIntervalMs: 30_000,
-        maxCapacity: 5_000,
-        sdkType: 'web',
-        sdkVersion: '0.0.0-test',
-        providerName: 'dynatrace',
-      });
+      const hook = makeHook({ metricsUrl: customUrl });
 
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       mockDoc.visibilityState = 'hidden';
@@ -188,7 +164,7 @@ describe('WebEvaluationMetricsHook', () => {
 
   describe('aggregate map keying', () => {
     it('increments count for a successful evaluation', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       hook.flush();
 
@@ -203,7 +179,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('accumulates multiple evaluations of the same variant into one entry', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       const d = makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' });
       fireFinally(hook, d);
       fireFinally(hook, d);
@@ -215,7 +191,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('creates separate entries for different variants of the same flag', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'off', reason: 'DEFAULT' }));
       hook.flush();
@@ -224,7 +200,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('creates separate entries for different flags', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       fireFinally(hook, makeDetails({ flagKey: 'flag-b', variant: 'on', reason: 'TARGETING_MATCH' }));
       hook.flush();
@@ -235,7 +211,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('sends nothing when no evaluations have been recorded', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       hook.flush();
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
@@ -245,7 +221,7 @@ describe('WebEvaluationMetricsHook', () => {
 
   describe('error normalisation', () => {
     it('uses variant=__default__ for error evaluations', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(
         hook,
         makeDetails({ flagKey: 'flag-a', errorCode: 'FLAG_NOT_FOUND' as any, variant: 'on', reason: 'ERROR' }),
@@ -256,7 +232,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('uses variant=__default__ when a fallback evaluation has no variant', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: undefined, reason: 'DEFAULT' }));
       hook.flush();
 
@@ -264,7 +240,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('uses variant=__default__ when the reason is the OpenFeature default reason', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: StandardResolutionReasons.DEFAULT }));
       hook.flush();
 
@@ -272,7 +248,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('uses evaluationReason=error for error evaluations', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', errorCode: 'FLAG_NOT_FOUND' as any, reason: 'ERROR' }));
       hook.flush();
 
@@ -280,7 +256,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('lowercases the errorCode', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', errorCode: 'FLAG_NOT_FOUND' as any, reason: 'ERROR' }));
       hook.flush();
 
@@ -288,7 +264,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('populates errorCode with a non-empty string for errors', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', errorCode: 'GENERAL' as any, reason: 'ERROR' }));
       hook.flush();
 
@@ -296,7 +272,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('does not set errorCode on successful evaluations', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       hook.flush();
 
@@ -309,7 +285,7 @@ describe('WebEvaluationMetricsHook', () => {
   describe('timestampSec', () => {
     it('is always a multiple of 10', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:07.000Z'));
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -319,7 +295,7 @@ describe('WebEvaluationMetricsHook', () => {
     it('floors to the correct 10-second bucket', () => {
       // 2024-01-01T00:00:07Z → epoch 1704067207 → floor to 1704067200
       vi.setSystemTime(new Date('2024-01-01T00:00:07.000Z'));
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -328,7 +304,7 @@ describe('WebEvaluationMetricsHook', () => {
 
     it('captures timestampSec at evaluation time, not flush time', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       vi.advanceTimersByTime(60_000);
@@ -340,7 +316,7 @@ describe('WebEvaluationMetricsHook', () => {
 
     it('buckets evaluations within the same 10-second window together', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:01.000Z'));
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       vi.setSystemTime(new Date('2024-01-01T00:00:09.000Z'));
@@ -354,7 +330,7 @@ describe('WebEvaluationMetricsHook', () => {
 
     it('creates separate entries for evaluations in different 10-second buckets', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       vi.setSystemTime(new Date('2024-01-01T00:00:10.000Z'));
@@ -369,7 +345,7 @@ describe('WebEvaluationMetricsHook', () => {
 
   describe('configVersion', () => {
     it('defaults to an empty string before setConfigVersion is called', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -377,7 +353,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('stamps the batch with the configured version', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       hook.setConfigVersion('abc-42');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
@@ -386,7 +362,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('coerces numeric versions to strings', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       hook.setConfigVersion(7);
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
@@ -395,7 +371,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('reflects the version active during the batch, not the latest-set version', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       hook.setConfigVersion('v1');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
@@ -410,7 +386,7 @@ describe('WebEvaluationMetricsHook', () => {
 
   describe('payload metadata', () => {
     it('sets version to the configured OFREP config version', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       hook.setConfigVersion('1779898567');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
@@ -419,7 +395,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('includes sdkType="web" in every flush', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -427,7 +403,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('includes the sdkVersion in every flush', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -435,7 +411,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('includes the providerName in every flush', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -447,7 +423,7 @@ describe('WebEvaluationMetricsHook', () => {
 
   describe('atomic map swap', () => {
     it('does not double-count: each flush only sees its own batch', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -462,7 +438,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('a second flush with no new evaluations sends nothing', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
       hook.flush();
@@ -475,7 +451,7 @@ describe('WebEvaluationMetricsHook', () => {
 
   describe('periodic flush', () => {
     it('clamps flushIntervalMs values between 0 and 999 to 1000ms', () => {
-      const hook = makeTransport({ flushIntervalMs: 50 });
+      const hook = makeHook({ flushIntervalMs: 50 });
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       vi.advanceTimersByTime(999);
@@ -487,7 +463,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('flushes after the configured interval', () => {
-      const hook = makeTransport({ flushIntervalMs: 30_000 });
+      const hook = makeHook({ flushIntervalMs: 30_000 });
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       expect(globalThis.fetch).not.toHaveBeenCalled();
@@ -497,7 +473,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('does not flush before the interval elapses', () => {
-      const hook = makeTransport({ flushIntervalMs: 30_000 });
+      const hook = makeHook({ flushIntervalMs: 30_000 });
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       vi.advanceTimersByTime(29_999);
@@ -506,7 +482,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('flushes on each successive tick', () => {
-      const hook = makeTransport({ flushIntervalMs: 30_000 });
+      const hook = makeHook({ flushIntervalMs: 30_000 });
 
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       vi.advanceTimersByTime(30_000);
@@ -524,7 +500,7 @@ describe('WebEvaluationMetricsHook', () => {
   describe('capacity flush', () => {
     it('flushes when the distinct-key count reaches maxCapacity', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
-      const hook = makeTransport({ maxCapacity: 3 });
+      const hook = makeHook({ maxCapacity: 3 });
 
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'a', reason: 'STATIC' }));
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'b', reason: 'STATIC' }));
@@ -536,7 +512,7 @@ describe('WebEvaluationMetricsHook', () => {
 
     it('includes all entries up to (and including) the capacity-triggering evaluation', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
-      const hook = makeTransport({ maxCapacity: 2 });
+      const hook = makeHook({ maxCapacity: 2 });
 
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'a', reason: 'STATIC' }));
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'b', reason: 'STATIC' }));
@@ -546,7 +522,7 @@ describe('WebEvaluationMetricsHook', () => {
 
     it('resets the map after a capacity flush so subsequent evals start fresh', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
-      const hook = makeTransport({ maxCapacity: 1 });
+      const hook = makeHook({ maxCapacity: 1 });
 
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'a', reason: 'STATIC' }));
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'a', reason: 'STATIC' }));
@@ -561,7 +537,7 @@ describe('WebEvaluationMetricsHook', () => {
 
   describe('visibilitychange flush', () => {
     it('calls navigator.sendBeacon when the tab becomes hidden', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       mockDoc.visibilityState = 'hidden';
@@ -572,7 +548,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('does NOT call fetch (uses sendBeacon instead) when the tab becomes hidden', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       mockDoc.visibilityState = 'hidden';
@@ -583,7 +559,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('passes the correct endpoint URL to sendBeacon', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       mockDoc.visibilityState = 'hidden';
@@ -595,7 +571,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('does not flush when the tab becomes visible again', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       mockDoc.visibilityState = 'visible';
@@ -611,7 +587,7 @@ describe('WebEvaluationMetricsHook', () => {
 
   describe('config-change flush', () => {
     it('flush() before setConfigVersion() ensures the batch carries the old version', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       hook.setConfigVersion('v1');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
@@ -622,7 +598,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('evaluations after the version update carry the new version', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       hook.setConfigVersion('v1');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
@@ -637,7 +613,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('exactly one version value appears per flush batch', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       hook.setConfigVersion('v1');
       fireFinally(hook, makeDetails({ flagKey: 'a', variant: 'on', reason: 'STATIC' }));
       fireFinally(hook, makeDetails({ flagKey: 'b', variant: 'off', reason: 'DEFAULT' }));
@@ -653,7 +629,7 @@ describe('WebEvaluationMetricsHook', () => {
 
   describe('context-change flush', () => {
     it('flush() before context change drains the pre-context-change batch', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       hook.setConfigVersion('v1');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
@@ -664,7 +640,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('evaluations after context change go into a fresh batch', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       hook.setConfigVersion('v1');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
@@ -684,7 +660,7 @@ describe('WebEvaluationMetricsHook', () => {
 
   describe('HTTP transport', () => {
     it('sends POST to the metrics endpoint with the Bearer Authorization header', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -695,7 +671,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('is non-blocking: flush() returns before fetch resolves', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       let returned = false;
@@ -715,7 +691,7 @@ describe('WebEvaluationMetricsHook', () => {
         }),
       );
 
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -739,7 +715,7 @@ describe('WebEvaluationMetricsHook', () => {
         }),
       );
 
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -763,7 +739,7 @@ describe('WebEvaluationMetricsHook', () => {
         }),
       );
 
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -785,7 +761,7 @@ describe('WebEvaluationMetricsHook', () => {
         vi.fn(() => Promise.resolve({ ok: false, status: 401 } as Response)),
       );
 
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -801,7 +777,7 @@ describe('WebEvaluationMetricsHook', () => {
 
   describe('destroy', () => {
     it('flushes remaining evaluations on destroy', () => {
-      const hook = makeTransport();
+      const hook = makeHook();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.destroy();
 
@@ -809,7 +785,7 @@ describe('WebEvaluationMetricsHook', () => {
     });
 
     it('stops the periodic timer after destroy', () => {
-      const hook = makeTransport({ flushIntervalMs: 30_000 });
+      const hook = makeHook({ flushIntervalMs: 30_000 });
       hook.destroy();
 
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
