@@ -35,12 +35,16 @@ export class RetryStrategy {
     return status >= 500 && status < 600;
   }
 
-  async execute(fetch: () => Promise<FetchResult>): Promise<FetchResult> {
+  async execute(fetch: () => Promise<FetchResult>, signal?: AbortSignal): Promise<FetchResult> {
     let lastResult: FetchResult | undefined;
     let lastError: Error | undefined;
     let delayMs = this.baseDelayMs;
 
     for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
+      if (signal?.aborted) {
+        throw new DOMException('The operation was aborted', 'AbortError');
+      }
+
       try {
         const result = await fetch();
         lastResult = result;
@@ -48,6 +52,9 @@ export class RetryStrategy {
           return result;
         }
       } catch (err) {
+        if (signal?.aborted || isAbortError(err)) {
+          throw err instanceof Error ? err : new DOMException('The operation was aborted', 'AbortError');
+        }
         lastError = err instanceof Error ? err : new Error(String(err));
       }
 
@@ -63,4 +70,8 @@ export class RetryStrategy {
     }
     throw lastError ?? new Error('all retry attempts failed');
   }
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'AbortError';
 }
