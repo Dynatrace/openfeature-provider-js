@@ -5,7 +5,7 @@ export const DEFAULT_METRICS_SOFT_CAP_DISTINCT_FLAGS = 1_000;
 export const DEFAULT_METRICS_HARD_CAP_DISTINCT_FLAGS = 2_000;
 
 export interface DynatraceProviderOptions {
-  /** Override the config origin (scheme, host, and port — no path). */
+  /** Override the config origin (scheme, host, and port — no path, query, or fragment). */
   configOrigin?: string;
   /** Override the metrics ingest endpoint URL. */
   metricsUrl?: string;
@@ -55,7 +55,16 @@ function validateConfigOrigin(origin: string): void {
   } catch {
     throw new Error(`configOrigin is not a valid URI: ${origin}`);
   }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`configOrigin must use http or https; got: "${origin}"`);
+  }
   if (url.pathname && url.pathname !== '/') {
     throw new Error(`configOrigin must not include a path; got: "${origin}"`);
+  }
+  if (url.search) {
+    throw new Error(`configOrigin must not include a query string; got: "${origin}"`);
+  }
+  if (url.hash) {
+    throw new Error(`configOrigin must not include a fragment; got: "${origin}"`);
   }
 }

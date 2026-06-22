@@ -36,4 +36,22 @@ describe('resolveProviderOptions', () => {
       'configOrigin must not include a path',
     );
   });
+
+  it('rejects configOrigin with a query string', () => {
+    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: 'https://cdn.example.com?x=y' })).toThrow(
+      'configOrigin must not include a query string',
+    );
+  });
+
+  it('rejects configOrigin with a fragment', () => {
+    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: 'https://cdn.example.com#frag' })).toThrow(
+      'configOrigin must not include a fragment',
+    );
+  });
+
+  it('rejects configOrigin with a non-http(s) scheme', () => {
+    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: 'ftp://cdn.example.com' })).toThrow(
+      'configOrigin must use http or https',
+    );
+  });
 });
