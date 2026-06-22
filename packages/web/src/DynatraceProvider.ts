@@ -78,7 +78,7 @@ export class DynatraceProvider implements Provider {
    */
   constructor(sdkKey: string, options?: DynatraceProviderOptions) {
     const { apiOrigin, pollInterval = -1, flushIntervalMs, maxCapacity } = options ?? {};
-    const { geo } = parseSdkKey(sdkKey, 'web');
+    const { geo, key } = parseSdkKey(sdkKey, 'web');
     const effectiveApiOrigin = apiOrigin ?? buildApiOrigin(geo);
     const effectiveMetricsUrl = options?.metricsUrl ?? buildMetricsUrl(geo);
     const effectivePollInterval = pollInterval !== -1 ? Math.max(pollInterval, 1000) : -1;
@@ -86,11 +86,11 @@ export class DynatraceProvider implements Provider {
     this._inner = new OFREPWebProvider({
       baseUrl: effectiveApiOrigin,
       pollInterval: effectivePollInterval,
-      headers: [['Authorization', `Bearer ${sdkKey}`]],
+      headers: [['Authorization', `Bearer ${key}`]],
     });
 
     this._metricsHook = new EvaluationMetricsHook({
-      authHeader: `Bearer ${sdkKey}`,
+      authHeader: `Bearer ${key}`,
       metricsUrl: effectiveMetricsUrl,
       flushIntervalMs,
       maxCapacity,

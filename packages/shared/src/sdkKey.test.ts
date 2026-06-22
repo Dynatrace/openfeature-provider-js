@@ -28,7 +28,12 @@ describe('parseSdkKey', () => {
   });
 
   it('rejects a server key when web platform is expected', () => {
-    expect(() => parseSdkKey(VALID_SERVER_KEY, 'web')).toThrow('[DynatraceProvider] Invalid SDK key format');
+    expect(() => parseSdkKey(VALID_SERVER_KEY, 'web')).toThrow(
+      "[DynatraceProvider] Invalid SDK key format (public: 'dt01.server_us_ab3xy9kp2q').",
+    );
+    expect(() => parseSdkKey(VALID_SERVER_KEY, 'web')).toThrow(
+      expect.not.stringContaining('03ee0ef7cd4244bfb8b71fea8f783f53'),
+    );
   });
 
   it('rejects malformed keys with a public segment in the error', () => {

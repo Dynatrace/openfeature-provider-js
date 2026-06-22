@@ -28,7 +28,7 @@ export function parseSdkKey(sdkKey: string, expectedPlatform?: SdkKeyPlatform): 
   const match = KEY_PATTERN.exec(trimmed);
   if (!match) {
     if (expectedPlatform != null) {
-      throw new Error(`[DynatraceProvider] Invalid SDK key format: "${trimmed}".`);
+      throw new Error(`[DynatraceProvider] Invalid SDK key format (public: '${publicKey(trimmed)}').`);
     }
     throw new Error(
       `[DynatraceProvider] Invalid SDK key format (public: '${publicKey(trimmed)}'); ` +
@@ -38,7 +38,7 @@ export function parseSdkKey(sdkKey: string, expectedPlatform?: SdkKeyPlatform): 
 
   const platform = match[2] as SdkKeyPlatform;
   if (expectedPlatform != null && platform !== expectedPlatform) {
-    throw new Error(`[DynatraceProvider] Invalid SDK key format: "${trimmed}".`);
+    throw new Error(`[DynatraceProvider] Invalid SDK key format (public: '${publicKey(trimmed)}').`);
   }
 
   return {
@@ -70,7 +70,7 @@ export function buildMetricsUrl(geo: string): string {
  *
  * @param configOrigin Optional origin override (scheme + host + port, no path).
  */
-export function buildCdnUrl(key: string, platform: string, geo: string, configOrigin?: string): string {
+export function buildCdnUrl(key: string, platform: SdkKeyPlatform, geo: string, configOrigin?: string): string {
   const base = configOrigin
     ? `${configOrigin.replace(/\/$/, '')}/${platform}/`
     : `https://cdn.${geo}.fm.dynatrace.com/${platform}/`;
