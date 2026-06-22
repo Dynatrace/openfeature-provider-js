@@ -81,17 +81,17 @@ describe('constructor', () => {
 
   it('passes a custom metricsUrl through to the metrics hook', () => {
     const provider = new DynatraceProvider(VALID_KEY_US, { metricsUrl: 'https://my-metrics.example.com/v1/metrics' });
-    expect((provider as any)._metricsHook._metricsEndpoint).toBe('https://my-metrics.example.com/v1/metrics');
+    expect((provider as any)._metrics.metricsUrl).toBe('https://my-metrics.example.com/v1/metrics');
   });
 
   it('derives the US metrics endpoint from a US sdkKey when metricsUrl is not provided', () => {
     const provider = new DynatraceProvider(VALID_KEY_US);
-    expect((provider as any)._metricsHook._metricsEndpoint).toBe('https://metrics.us.fm.dynatrace.com/v1/metrics');
+    expect((provider as any)._metrics.metricsUrl).toBe('https://metrics.us.fm.dynatrace.com/v1/metrics');
   });
 
   it('derives the EU metrics endpoint from a EU sdkKey when metricsUrl is not provided', () => {
     const provider = new DynatraceProvider(VALID_KEY_EU);
-    expect((provider as any)._metricsHook._metricsEndpoint).toBe('https://metrics.eu.fm.dynatrace.com/v1/metrics');
+    expect((provider as any)._metrics.metricsUrl).toBe('https://metrics.eu.fm.dynatrace.com/v1/metrics');
   });
 
   it('defaults pollInterval to -1 (disabled) when not provided', () => {
@@ -250,7 +250,7 @@ describe('config version from OFREP metadata', () => {
     mockInner.initialize.mockResolvedValue(undefined);
 
     const provider = new DynatraceProvider(VALID_KEY_US);
-    const setConfigVersionSpy = vi.spyOn((provider as any)._metricsHook, 'setConfigVersion');
+    const setConfigVersionSpy = vi.spyOn((provider as any)._metrics, 'setConfigVersion');
 
     await provider.initialize(ctx);
 
@@ -263,7 +263,7 @@ describe('config version from OFREP metadata', () => {
     });
 
     const provider = new DynatraceProvider(VALID_KEY_US);
-    const setConfigVersionSpy = vi.spyOn((provider as any)._metricsHook, 'setConfigVersion');
+    const setConfigVersionSpy = vi.spyOn((provider as any)._metrics, 'setConfigVersion');
 
     await provider.onContextChange({ targetingKey: 'old' }, { targetingKey: 'new' });
 
@@ -274,7 +274,7 @@ describe('config version from OFREP metadata', () => {
     mockInner.initialize.mockResolvedValue(undefined);
 
     const provider = new DynatraceProvider(VALID_KEY_US);
-    const setConfigVersionSpy = vi.spyOn((provider as any)._metricsHook, 'setConfigVersion');
+    const setConfigVersionSpy = vi.spyOn((provider as any)._metrics, 'setConfigVersion');
 
     await provider.initialize(ctx);
 
@@ -316,7 +316,7 @@ describe('ConfigurationChanged event handler', () => {
     (mockInner as any)._flagSetMetadataCache = { version: 'v2' };
 
     const provider = new DynatraceProvider(VALID_KEY_US);
-    const metricsHook = (provider as any)._metricsHook;
+    const metricsHook = (provider as any)._metrics;
 
     const callOrder: string[] = [];
     vi.spyOn(metricsHook, 'flush').mockImplementation(() => callOrder.push('flush'));
@@ -333,7 +333,7 @@ describe('ConfigurationChanged event handler', () => {
     (mockInner as any)._flagSetMetadataCache = { version: 'v2' };
 
     const provider = new DynatraceProvider(VALID_KEY_US);
-    const setConfigVersionSpy = vi.spyOn((provider as any)._metricsHook, 'setConfigVersion');
+    const setConfigVersionSpy = vi.spyOn((provider as any)._metrics, 'setConfigVersion');
 
     emitter.fire(ClientProviderEvents.ConfigurationChanged);
 
@@ -353,7 +353,7 @@ describe('onContextChange flush ordering', () => {
     });
 
     const provider = new DynatraceProvider(VALID_KEY_US);
-    vi.spyOn((provider as any)._metricsHook, 'flush').mockImplementation(() => callOrder.push('flush'));
+    vi.spyOn((provider as any)._metrics, 'flush').mockImplementation(() => callOrder.push('flush'));
 
     await provider.onContextChange({ targetingKey: 'old' }, { targetingKey: 'new' });
 
@@ -366,7 +366,7 @@ describe('onContextChange flush ordering', () => {
     });
 
     const provider = new DynatraceProvider(VALID_KEY_US);
-    const setConfigVersionSpy = vi.spyOn((provider as any)._metricsHook, 'setConfigVersion');
+    const setConfigVersionSpy = vi.spyOn((provider as any)._metrics, 'setConfigVersion');
 
     await provider.onContextChange({ targetingKey: 'old' }, { targetingKey: 'new' });
 

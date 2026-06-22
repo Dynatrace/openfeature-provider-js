@@ -10,8 +10,8 @@ import type {
   Hook,
 } from '@openfeature/web-sdk';
 import { ClientProviderEvents } from '@openfeature/web-sdk';
-import { EvaluationMetricsHook } from '../../shared/src/EvaluationMetricsHook.js';
 import { buildMetricsUrl, parseSdkKey } from '../../shared/src/sdkKey.js';
+import { BrowserMetricsTransport } from './metrics/BrowserMetricsTransport.js';
 import { PACKAGE_VERSION } from './version';
 
 export interface DynatraceProviderOptions {
@@ -70,7 +70,7 @@ export class DynatraceProvider implements Provider {
   }
 
   private readonly _inner: OFREPWebProvider;
-  private readonly _metricsHook: EvaluationMetricsHook;
+  private readonly _metrics: BrowserMetricsTransport;
 
   /**
    * @param sdkKey  Dynatrace web SDK key (`dt01.web_{geo}_...`). Validated immediately.
@@ -89,7 +89,7 @@ export class DynatraceProvider implements Provider {
       headers: [['Authorization', `Bearer ${key}`]],
     });
 
-    this._metricsHook = new EvaluationMetricsHook({
+    this._metrics = new BrowserMetricsTransport({
       authHeader: `Bearer ${key}`,
       metricsUrl: effectiveMetricsUrl,
       flushIntervalMs,
@@ -99,31 +99,31 @@ export class DynatraceProvider implements Provider {
       providerName: this.metadata.name,
     });
 
-    this.hooks = [this._metricsHook];
+    this.hooks = [this._metrics.hook];
 
     this._inner.events?.addHandler?.(ClientProviderEvents.ConfigurationChanged, () => {
-      this._metricsHook.flush();
-      this._metricsHook.setConfigVersion(this._readInnerConfigVersion());
+      this._metrics.flush();
+      this._metrics.setConfigVersion(this._readInnerConfigVersion());
     });
   }
 
   public async initialize(context?: EvaluationContext): Promise<void> {
     await this._inner.initialize(context);
-    this._metricsHook.setConfigVersion(this._readInnerConfigVersion());
+    this._metrics.setConfigVersion(this._readInnerConfigVersion());
   }
 
   public async onContextChange(oldContext: EvaluationContext, newContext: EvaluationContext): Promise<void> {
     // Flush before the context change so the drained batch reflects the
     // context (and config version) it was evaluated under.
-    this._metricsHook.flush();
+    this._metrics.flush();
 
     await this._inner.onContextChange(oldContext, newContext);
 
-    this._metricsHook.setConfigVersion(this._readInnerConfigVersion());
+    this._metrics.setConfigVersion(this._readInnerConfigVersion());
   }
 
   public async onClose(): Promise<void> {
-    this._metricsHook.destroy();
+    this._metrics.destroy();
     return this._inner.onClose?.() ?? Promise.resolve();
   }
 

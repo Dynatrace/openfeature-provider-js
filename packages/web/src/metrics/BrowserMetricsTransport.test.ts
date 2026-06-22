@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StandardResolutionReasons } from '@openfeature/core';
-import { EvaluationMetricsHook } from './EvaluationMetricsHook';
+import { BrowserMetricsTransport } from './BrowserMetricsTransport';
 import type { EvaluationDetails, FlagValue } from '@openfeature/core';
-import type { FlushPayload } from './EvaluationMetricsHook';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -25,8 +24,8 @@ function makeDetails(
   };
 }
 
-function makeHook(opts?: { flushIntervalMs?: number; maxCapacity?: number }) {
-  return new EvaluationMetricsHook({
+function makeTransport(opts?: { flushIntervalMs?: number; maxCapacity?: number }) {
+  return new BrowserMetricsTransport({
     authHeader: AUTH_HEADER,
     metricsUrl: MOCK_METRICS_URL,
     flushIntervalMs: opts?.flushIntervalMs ?? 30_000,
@@ -37,8 +36,8 @@ function makeHook(opts?: { flushIntervalMs?: number; maxCapacity?: number }) {
   });
 }
 
-function fireFinally(hook: EvaluationMetricsHook, details: EvaluationDetails<FlagValue>): void {
-  hook.finally?.({} as any, details);
+function fireFinally(transport: BrowserMetricsTransport, details: EvaluationDetails<FlagValue>): void {
+  transport.hook.finally?.({} as any, details);
 }
 
 function lastFetchBody(): FlushPayload {
@@ -76,7 +75,7 @@ let mockDoc: MockDoc;
 
 // ── Suite ────────────────────────────────────────────────────────────────────
 
-describe('EvaluationMetricsHook', () => {
+describe('BrowserMetricsTransport', () => {
   beforeEach(() => {
     vi.useFakeTimers();
 
@@ -124,12 +123,12 @@ describe('EvaluationMetricsHook', () => {
 
   describe('metrics endpoint', () => {
     it('uses the configured metrics endpoint', () => {
-      const hook = makeHook();
-      expect((hook as any)._metricsEndpoint).toBe(MOCK_METRICS_URL);
+      const hook = makeTransport();
+      expect((hook as any).metricsUrl).toBe(MOCK_METRICS_URL);
     });
 
     it('uses the provided metricsUrl override instead of the default', () => {
-      const hook = new EvaluationMetricsHook({
+      const hook = new BrowserMetricsTransport({
         authHeader: AUTH_HEADER,
         metricsUrl: 'https://my-proxy.example.com/v1/metrics',
         flushIntervalMs: 30_000,
@@ -138,13 +137,13 @@ describe('EvaluationMetricsHook', () => {
         sdkVersion: '0.0.0-test',
         providerName: 'dynatrace',
       });
-      expect((hook as any)._metricsEndpoint).toBe('https://my-proxy.example.com/v1/metrics');
+      expect((hook as any).metricsUrl).toBe('https://my-proxy.example.com/v1/metrics');
       hook.destroy();
     });
 
     it('sends flush requests to the overridden metricsUrl', () => {
       const customUrl = 'https://my-proxy.example.com/v1/metrics';
-      const hook = new EvaluationMetricsHook({
+      const hook = new BrowserMetricsTransport({
         authHeader: AUTH_HEADER,
         metricsUrl: customUrl,
         flushIntervalMs: 30_000,
@@ -164,7 +163,7 @@ describe('EvaluationMetricsHook', () => {
 
     it('sends beacon requests to the overridden metricsUrl on page hide', () => {
       const customUrl = 'https://my-proxy.example.com/v1/metrics';
-      const hook = new EvaluationMetricsHook({
+      const hook = new BrowserMetricsTransport({
         authHeader: AUTH_HEADER,
         metricsUrl: customUrl,
         flushIntervalMs: 30_000,
@@ -188,7 +187,7 @@ describe('EvaluationMetricsHook', () => {
 
   describe('aggregate map keying', () => {
     it('increments count for a successful evaluation', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       hook.flush();
 
@@ -203,7 +202,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('accumulates multiple evaluations of the same variant into one entry', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       const d = makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' });
       fireFinally(hook, d);
       fireFinally(hook, d);
@@ -215,7 +214,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('creates separate entries for different variants of the same flag', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'off', reason: 'DEFAULT' }));
       hook.flush();
@@ -224,7 +223,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('creates separate entries for different flags', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       fireFinally(hook, makeDetails({ flagKey: 'flag-b', variant: 'on', reason: 'TARGETING_MATCH' }));
       hook.flush();
@@ -235,7 +234,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('sends nothing when no evaluations have been recorded', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       hook.flush();
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
@@ -245,7 +244,7 @@ describe('EvaluationMetricsHook', () => {
 
   describe('error normalisation', () => {
     it('uses variant=__default__ for error evaluations', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(
         hook,
         makeDetails({ flagKey: 'flag-a', errorCode: 'FLAG_NOT_FOUND' as any, variant: 'on', reason: 'ERROR' }),
@@ -256,7 +255,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('uses variant=__default__ when a fallback evaluation has no variant', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: undefined, reason: 'DEFAULT' }));
       hook.flush();
 
@@ -264,7 +263,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('uses variant=__default__ when the reason is the OpenFeature default reason', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: StandardResolutionReasons.DEFAULT }));
       hook.flush();
 
@@ -272,7 +271,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('uses evaluationReason=error for error evaluations', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', errorCode: 'FLAG_NOT_FOUND' as any, reason: 'ERROR' }));
       hook.flush();
 
@@ -280,7 +279,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('lowercases the errorCode', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', errorCode: 'FLAG_NOT_FOUND' as any, reason: 'ERROR' }));
       hook.flush();
 
@@ -288,7 +287,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('populates errorCode with a non-empty string for errors', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', errorCode: 'GENERAL' as any, reason: 'ERROR' }));
       hook.flush();
 
@@ -296,7 +295,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('does not set errorCode on successful evaluations', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       hook.flush();
 
@@ -309,7 +308,7 @@ describe('EvaluationMetricsHook', () => {
   describe('timestampSec', () => {
     it('is always a multiple of 10', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:07.000Z'));
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -319,7 +318,7 @@ describe('EvaluationMetricsHook', () => {
     it('floors to the correct 10-second bucket', () => {
       // 2024-01-01T00:00:07Z → epoch 1704067207 → floor to 1704067200
       vi.setSystemTime(new Date('2024-01-01T00:00:07.000Z'));
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -328,7 +327,7 @@ describe('EvaluationMetricsHook', () => {
 
     it('captures timestampSec at evaluation time, not flush time', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       vi.advanceTimersByTime(60_000);
@@ -340,7 +339,7 @@ describe('EvaluationMetricsHook', () => {
 
     it('buckets evaluations within the same 10-second window together', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:01.000Z'));
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       vi.setSystemTime(new Date('2024-01-01T00:00:09.000Z'));
@@ -354,7 +353,7 @@ describe('EvaluationMetricsHook', () => {
 
     it('creates separate entries for evaluations in different 10-second buckets', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       vi.setSystemTime(new Date('2024-01-01T00:00:10.000Z'));
@@ -369,7 +368,7 @@ describe('EvaluationMetricsHook', () => {
 
   describe('configVersion', () => {
     it('defaults to an empty string before setConfigVersion is called', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -377,7 +376,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('stamps the batch with the configured version', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       hook.setConfigVersion('abc-42');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
@@ -386,7 +385,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('coerces numeric versions to strings', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       hook.setConfigVersion(7);
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
@@ -395,7 +394,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('reflects the version active during the batch, not the latest-set version', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       hook.setConfigVersion('v1');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
@@ -410,7 +409,7 @@ describe('EvaluationMetricsHook', () => {
 
   describe('payload metadata', () => {
     it('sets version to the configured OFREP config version', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       hook.setConfigVersion('1779898567');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
@@ -419,7 +418,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('includes sdkType="web" in every flush', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -427,7 +426,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('includes the sdkVersion in every flush', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -435,7 +434,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('includes the providerName in every flush', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -447,7 +446,7 @@ describe('EvaluationMetricsHook', () => {
 
   describe('atomic map swap', () => {
     it('does not double-count: each flush only sees its own batch', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -462,7 +461,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('a second flush with no new evaluations sends nothing', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
       hook.flush();
@@ -475,7 +474,7 @@ describe('EvaluationMetricsHook', () => {
 
   describe('periodic flush', () => {
     it('clamps flushIntervalMs values between 0 and 999 to 1000ms', () => {
-      const hook = makeHook({ flushIntervalMs: 50 });
+      const hook = makeTransport({ flushIntervalMs: 50 });
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       vi.advanceTimersByTime(999);
@@ -487,7 +486,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('flushes after the configured interval', () => {
-      const hook = makeHook({ flushIntervalMs: 30_000 });
+      const hook = makeTransport({ flushIntervalMs: 30_000 });
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       expect(globalThis.fetch).not.toHaveBeenCalled();
@@ -497,7 +496,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('does not flush before the interval elapses', () => {
-      const hook = makeHook({ flushIntervalMs: 30_000 });
+      const hook = makeTransport({ flushIntervalMs: 30_000 });
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       vi.advanceTimersByTime(29_999);
@@ -506,7 +505,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('flushes on each successive tick', () => {
-      const hook = makeHook({ flushIntervalMs: 30_000 });
+      const hook = makeTransport({ flushIntervalMs: 30_000 });
 
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       vi.advanceTimersByTime(30_000);
@@ -524,7 +523,7 @@ describe('EvaluationMetricsHook', () => {
   describe('capacity flush', () => {
     it('flushes when the distinct-key count reaches maxCapacity', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
-      const hook = makeHook({ maxCapacity: 3 });
+      const hook = makeTransport({ maxCapacity: 3 });
 
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'a', reason: 'STATIC' }));
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'b', reason: 'STATIC' }));
@@ -536,7 +535,7 @@ describe('EvaluationMetricsHook', () => {
 
     it('includes all entries up to (and including) the capacity-triggering evaluation', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
-      const hook = makeHook({ maxCapacity: 2 });
+      const hook = makeTransport({ maxCapacity: 2 });
 
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'a', reason: 'STATIC' }));
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'b', reason: 'STATIC' }));
@@ -546,7 +545,7 @@ describe('EvaluationMetricsHook', () => {
 
     it('resets the map after a capacity flush so subsequent evals start fresh', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
-      const hook = makeHook({ maxCapacity: 1 });
+      const hook = makeTransport({ maxCapacity: 1 });
 
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'a', reason: 'STATIC' }));
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'a', reason: 'STATIC' }));
@@ -561,7 +560,7 @@ describe('EvaluationMetricsHook', () => {
 
   describe('visibilitychange flush', () => {
     it('calls navigator.sendBeacon when the tab becomes hidden', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       mockDoc.visibilityState = 'hidden';
@@ -572,7 +571,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('does NOT call fetch (uses sendBeacon instead) when the tab becomes hidden', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       mockDoc.visibilityState = 'hidden';
@@ -583,7 +582,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('passes the correct endpoint URL to sendBeacon', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       mockDoc.visibilityState = 'hidden';
@@ -595,7 +594,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('does not flush when the tab becomes visible again', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       mockDoc.visibilityState = 'visible';
@@ -611,7 +610,7 @@ describe('EvaluationMetricsHook', () => {
 
   describe('config-change flush', () => {
     it('flush() before setConfigVersion() ensures the batch carries the old version', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       hook.setConfigVersion('v1');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
@@ -622,7 +621,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('evaluations after the version update carry the new version', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       hook.setConfigVersion('v1');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
@@ -637,7 +636,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('exactly one version value appears per flush batch', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       hook.setConfigVersion('v1');
       fireFinally(hook, makeDetails({ flagKey: 'a', variant: 'on', reason: 'STATIC' }));
       fireFinally(hook, makeDetails({ flagKey: 'b', variant: 'off', reason: 'DEFAULT' }));
@@ -653,7 +652,7 @@ describe('EvaluationMetricsHook', () => {
 
   describe('context-change flush', () => {
     it('flush() before context change drains the pre-context-change batch', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       hook.setConfigVersion('v1');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
@@ -664,7 +663,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('evaluations after context change go into a fresh batch', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       hook.setConfigVersion('v1');
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
@@ -684,7 +683,7 @@ describe('EvaluationMetricsHook', () => {
 
   describe('HTTP transport', () => {
     it('sends POST to the metrics endpoint with the Bearer Authorization header', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -695,7 +694,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('is non-blocking: flush() returns before fetch resolves', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
 
       let returned = false;
@@ -715,7 +714,7 @@ describe('EvaluationMetricsHook', () => {
         }),
       );
 
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -739,7 +738,7 @@ describe('EvaluationMetricsHook', () => {
         }),
       );
 
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -763,7 +762,7 @@ describe('EvaluationMetricsHook', () => {
         }),
       );
 
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -785,7 +784,7 @@ describe('EvaluationMetricsHook', () => {
         vi.fn(() => Promise.resolve({ ok: false, status: 401 } as Response)),
       );
 
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.flush();
 
@@ -801,7 +800,7 @@ describe('EvaluationMetricsHook', () => {
 
   describe('destroy', () => {
     it('flushes remaining evaluations on destroy', () => {
-      const hook = makeHook();
+      const hook = makeTransport();
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
       hook.destroy();
 
@@ -809,7 +808,7 @@ describe('EvaluationMetricsHook', () => {
     });
 
     it('stops the periodic timer after destroy', () => {
-      const hook = makeHook({ flushIntervalMs: 30_000 });
+      const hook = makeTransport({ flushIntervalMs: 30_000 });
       hook.destroy();
 
       fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
