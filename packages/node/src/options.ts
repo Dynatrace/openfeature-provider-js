@@ -25,11 +25,15 @@ export function resolveProviderOptions(
   const parsed = parseSdkKey(sdkKey, 'server');
   const trimmedKey = parsed.key;
 
-  if (options.configOrigin != null && options.configOrigin.trim() === '') {
-    throw new Error('configOrigin must not be null or blank');
+  if (options.configOrigin !== undefined) {
+    if (options.configOrigin == null || options.configOrigin.trim() === '') {
+      throw new Error('configOrigin must not be null or blank');
+    }
   }
-  if (options.metricsUrl != null && options.metricsUrl.trim() === '') {
-    throw new Error('metricsUrl must not be null or blank');
+  if (options.metricsUrl !== undefined) {
+    if (options.metricsUrl == null || options.metricsUrl.trim() === '') {
+      throw new Error('metricsUrl must not be null or blank');
+    }
   }
 
   const configOrigin = options.configOrigin?.trim();

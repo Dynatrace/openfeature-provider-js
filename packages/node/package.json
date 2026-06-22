@@ -54,6 +54,7 @@
     "@openfeature/flagd-core": "^4.0.0"
   },
   "peerDependencies": {
+    "@openfeature/core": "^1.11.0",
     "@openfeature/server-sdk": "^1.17.0"
   },
   "publishConfig": {

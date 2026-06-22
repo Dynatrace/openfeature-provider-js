@@ -37,6 +37,18 @@ describe('resolveProviderOptions', () => {
     );
   });
 
+  it('rejects explicit null configOrigin', () => {
+    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: null as unknown as string })).toThrow(
+      'configOrigin must not be null or blank',
+    );
+  });
+
+  it('rejects explicit null metricsUrl', () => {
+    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { metricsUrl: null as unknown as string })).toThrow(
+      'metricsUrl must not be null or blank',
+    );
+  });
+
   it('rejects configOrigin with a query string', () => {
     expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: 'https://cdn.example.com?x=y' })).toThrow(
       'configOrigin must not include a query string',
