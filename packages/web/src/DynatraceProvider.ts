@@ -11,6 +11,7 @@ import type {
 } from '@openfeature/web-sdk';
 import { ClientProviderEvents } from '@openfeature/web-sdk';
 import { EvaluationMetricsHook } from '../../shared/src/EvaluationMetricsHook.js';
+import { buildMetricsUrl, parseSdkKey } from '../../shared/src/sdkKey.js';
 import { PACKAGE_VERSION } from './version';
 
 export interface DynatraceProviderOptions {
@@ -44,24 +45,8 @@ export interface DynatraceProviderOptions {
   maxCapacity?: number;
 }
 
-// {token}.web_{geo}_{publicRandom}.{secret}_{sha1}
-// e.g.   dt01.web_us_ab3xy9kp2q.03ee0ef7cd4244bfb8b71fea8f783f53_d4f8a9c12a
-const SDK_KEY_RE = /^(dt[0-9]{2})\.web_([a-z]{2})_([a-zA-Z0-9]{10})\.([a-f0-9]{32})_([a-f0-9]{10,})$/;
-
-function readSdkKeyGeo(sdkKey: string): string {
-  const match = SDK_KEY_RE.exec(sdkKey);
-  if (!match) {
-    throw new Error(`[DynatraceProvider] Invalid SDK key format: "${sdkKey}".`);
-  }
-  return match[2];
-}
-
 function buildApiOrigin(geo: string): string {
   return `https://ofrep.${geo}.fm.dynatrace.com`;
-}
-
-function buildMetricsUrl(geo: string): string {
-  return `https://metrics.${geo}.fm.dynatrace.com/v1/metrics`;
 }
 
 /**
@@ -93,7 +78,7 @@ export class DynatraceProvider implements Provider {
    */
   constructor(sdkKey: string, options?: DynatraceProviderOptions) {
     const { apiOrigin, pollInterval = -1, flushIntervalMs, maxCapacity } = options ?? {};
-    const geo = readSdkKeyGeo(sdkKey);
+    const { geo, key } = parseSdkKey(sdkKey, 'web');
     const effectiveApiOrigin = apiOrigin ?? buildApiOrigin(geo);
     const effectiveMetricsUrl = options?.metricsUrl ?? buildMetricsUrl(geo);
     const effectivePollInterval = pollInterval !== -1 ? Math.max(pollInterval, 1000) : -1;
@@ -101,11 +86,11 @@ export class DynatraceProvider implements Provider {
     this._inner = new OFREPWebProvider({
       baseUrl: effectiveApiOrigin,
       pollInterval: effectivePollInterval,
-      headers: [['Authorization', `Bearer ${sdkKey}`]],
+      headers: [['Authorization', `Bearer ${key}`]],
     });
 
     this._metricsHook = new EvaluationMetricsHook({
-      authHeader: `Bearer ${sdkKey}`,
+      authHeader: `Bearer ${key}`,
       metricsUrl: effectiveMetricsUrl,
       flushIntervalMs,
       maxCapacity,

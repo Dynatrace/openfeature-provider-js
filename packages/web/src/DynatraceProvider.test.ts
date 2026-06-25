@@ -67,6 +67,13 @@ describe('constructor', () => {
     );
   });
 
+  it('trims surrounding whitespace from the sdkKey before sending Authorization', () => {
+    new DynatraceProvider(`  ${VALID_KEY_US}  `);
+    expect(OFREPWebProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ headers: [['Authorization', `Bearer ${VALID_KEY_US}`]] }),
+    );
+  });
+
   it('uses a custom apiOrigin instead of deriving from the sdkKey', () => {
     new DynatraceProvider(VALID_KEY_US, { apiOrigin: 'https://custom.example.com' });
     expect(OFREPWebProvider).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: 'https://custom.example.com' }));
