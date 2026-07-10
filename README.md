@@ -15,11 +15,12 @@ npm run format
 
 ## Packages
 
-| Package                                                 | Description                                     |
-| ------------------------------------------------------- | ----------------------------------------------- |
-| [`@dynatrace/openfeature-provider-web`](./packages/web) | Dynatrace OpenFeature provider for web browsers |
+| Package                                                   | Description                                              |
+| --------------------------------------------------------- | -------------------------------------------------------- |
+| [`@dynatrace/openfeature-provider-web`](./packages/web)   | Dynatrace OpenFeature provider for web browsers          |
+| [`@dynatrace/openfeature-provider-node`](./packages/node) | Dynatrace OpenFeature provider for Node.js (server-side) |
 
-Internal (not published): `packages/shared` (evaluation metrics hook, bundled into providers).
+Internal (not published): `packages/shared` (SDK-key helpers and evaluation metrics core, bundled into providers).
 
 ## License
 
