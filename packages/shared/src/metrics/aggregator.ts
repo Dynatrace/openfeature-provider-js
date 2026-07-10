@@ -16,8 +16,13 @@ export interface MetricsAggregatorOptions {
   maxDistinctFlags?: number;
 }
 
+export interface DrainedBucket {
+  key: EvaluationMetricKey;
+  count: number;
+}
+
 export interface DrainedBatch {
-  evaluations: Map<string, Map<EvaluationMetricKey, number>>;
+  evaluations: Map<string, DrainedBucket[]>;
   version: string;
   isEmpty(): boolean;
 }
@@ -101,13 +106,9 @@ export class MetricsAggregator {
     this._bucketCount = 0;
     const drainedVersion = this._version;
 
-    const evaluations = new Map<string, Map<EvaluationMetricKey, number>>();
+    const evaluations = new Map<string, DrainedBucket[]>();
     for (const [flagKey, inner] of previous) {
-      const buckets = new Map<EvaluationMetricKey, number>();
-      for (const { key, count } of inner.values()) {
-        buckets.set(key, count);
-      }
-      evaluations.set(flagKey, buckets);
+      evaluations.set(flagKey, [...inner.values()]);
     }
 
     return {

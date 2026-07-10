@@ -1,10 +1,10 @@
-import type { EvaluationMetricKey } from './aggregator';
+import type { DrainedBucket } from './aggregator';
 
 export interface FlushRecord {
   flagKey: string;
   variant: string;
   evaluationReason: string;
-  errorCode: string;
+  errorCode?: string;
   timestampSec: number;
   count: number;
 }
@@ -28,24 +28,22 @@ export interface BuildPayloadMetadata {
   includeConfigVersion?: boolean;
 }
 
-export function buildPayload(
-  evaluations: Map<string, Map<EvaluationMetricKey, number>>,
-  metadata: BuildPayloadMetadata,
-): FlushPayload {
-  const rows: FlushRecord[] = [];
-
-  for (const [flagKey, buckets] of evaluations) {
-    for (const [key, count] of buckets) {
-      rows.push({
+export function buildPayload(evaluations: Map<string, DrainedBucket[]>, metadata: BuildPayloadMetadata): FlushPayload {
+  const rows: FlushRecord[] = [...evaluations].reduce<FlushRecord[]>(
+    (acc, [flagKey, buckets]) => [
+      ...acc,
+      ...buckets.map(({ key, count }) => ({
         flagKey,
         variant: key.variant,
         evaluationReason: key.reason,
-        errorCode: key.errorCode,
         timestampSec: key.timestampSec,
         count,
-      });
-    }
-  }
+        // omit errorCode when empty, matching the Java/Go providers
+        ...(key.errorCode ? { errorCode: key.errorCode } : {}),
+      })),
+    ],
+    [],
+  );
 
   const payload: FlushPayload = {
     version: metadata.version,

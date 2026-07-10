@@ -9,7 +9,7 @@ describe('MetricsAggregator', () => {
     const batch = agg.drain();
     expect(batch.version).toBe('v1');
     expect(batch.isEmpty()).toBe(false);
-    expect(batch.evaluations.get('flag-a')?.size).toBe(1);
+    expect(batch.evaluations.get('flag-a')?.length).toBe(1);
   });
 
   it('gates on version when enabled', () => {

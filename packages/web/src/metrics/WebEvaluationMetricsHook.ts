@@ -14,7 +14,6 @@ export interface WebEvaluationMetricsHookOptions {
   metricsUrl: string;
   flushIntervalMs?: number;
   maxCapacity?: number;
-  sdkType: 'web' | 'server' | 'mobile';
   sdkVersion: string;
   providerName: string;
 }
@@ -27,7 +26,6 @@ export class WebEvaluationMetricsHook {
   private readonly _authHeader: string;
   private readonly _flushIntervalMs: number;
   private readonly _maxCapacity: number;
-  private readonly _sdkType: 'web' | 'server' | 'mobile';
   private readonly _sdkVersion: string;
   private readonly _providerName: string;
 
@@ -43,10 +41,11 @@ export class WebEvaluationMetricsHook {
     const intervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
     this._flushIntervalMs = intervalMs < 0 ? intervalMs : Math.max(intervalMs, MIN_FLUSH_INTERVAL_MS);
     this._maxCapacity = options.maxCapacity ?? DEFAULT_MAX_CAPACITY;
-    this._sdkType = options.sdkType;
     this._sdkVersion = options.sdkVersion;
     this._providerName = options.providerName;
 
+    // web delivers best-effort metrics; unlike the server providers it does not
+    // gate on config version (CDN config isn't versioned on the browser path)
     this._aggregator = new MetricsAggregator({ gateOnVersion: false });
     this.hook = new MetricsHook(this._aggregator, {
       onRecord: () => this._maybeCapacityFlush(),
@@ -68,7 +67,7 @@ export class WebEvaluationMetricsHook {
 
     const payload = buildPayload(batch.evaluations, {
       version: batch.version,
-      sdkType: this._sdkType,
+      sdkType: 'web',
       sdkVersion: this._sdkVersion,
       providerName: this._providerName,
       includeConfigVersion: true,

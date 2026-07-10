@@ -31,7 +31,6 @@ function makeHook(opts?: { flushIntervalMs?: number; maxCapacity?: number; metri
     metricsUrl: opts?.metricsUrl ?? MOCK_METRICS_URL,
     flushIntervalMs: opts?.flushIntervalMs ?? 30_000,
     maxCapacity: opts?.maxCapacity ?? 5_000,
-    sdkType: 'web',
     sdkVersion: '0.0.0-test',
     providerName: 'dynatrace',
   });
@@ -174,7 +173,7 @@ describe('WebEvaluationMetricsHook', () => {
       expect(rec.flagKey).toBe('flag-a');
       expect(rec.variant).toBe('on');
       expect(rec.evaluationReason).toBe('TARGETING_MATCH');
-      expect(rec.errorCode).toBe('');
+      expect(rec.errorCode).toBeUndefined();
       expect(rec.count).toBe(1);
     });
 
@@ -276,7 +275,7 @@ describe('WebEvaluationMetricsHook', () => {
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       hook.flush();
 
-      expect(lastFetchBody().evaluations[0].errorCode).toBe('');
+      expect(lastFetchBody().evaluations[0].errorCode).toBeUndefined();
     });
   });
 

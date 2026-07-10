@@ -94,7 +94,6 @@ export class DynatraceProvider implements Provider {
       metricsUrl: effectiveMetricsUrl,
       flushIntervalMs,
       maxCapacity,
-      sdkType: 'web',
       sdkVersion: PACKAGE_VERSION,
       providerName: this.metadata.name,
     });
