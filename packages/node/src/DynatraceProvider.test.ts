@@ -10,21 +10,26 @@ function createMockFetch(handlers: {
   initialStatus?: number;
   onPoll?: (pollIndex: number) => { status: number; body?: string };
 }): typeof fetch {
-  let callCount = 0;
-  return vi.fn(async () => {
-    callCount++;
-    if (callCount === 1) {
+  let cdnCallCount = 0;
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (init?.method === 'POST' && url.includes('/v1/metrics')) {
+      return new Response(null, { status: 202 });
+    }
+
+    cdnCallCount++;
+    if (cdnCallCount === 1) {
       const status = handlers.initialStatus ?? 200;
       return new Response(handlers.initialBody ?? TEST_FLAG_JSON, {
         status,
         headers: { ETag: '"v1"' },
       });
     }
-    const pollIndex = callCount - 2;
+    const pollIndex = cdnCallCount - 2;
     const poll = handlers.onPoll?.(pollIndex) ?? { status: 304 };
     return new Response(poll.body ?? null, {
       status: poll.status,
-      headers: poll.body != null ? { ETag: `"v${callCount}"` } : {},
+      headers: poll.body != null ? { ETag: `"v${cdnCallCount}"` } : {},
     });
   }) as typeof fetch;
 }
@@ -311,5 +316,39 @@ describe('DynatraceProvider', () => {
     await provider.onClose();
     await provider.onClose();
     expect(provider.state).toBe('NOT_READY');
+  });
+
+  it('exposes a metrics hook', () => {
+    const provider = new DynatraceProvider(VALID_SERVER_KEY);
+    expect(provider.hooks).toHaveLength(1);
+  });
+
+  it('flushes evaluation metrics on close', async () => {
+    const fetch = createMockFetch({});
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, {}, { fetch, metricsFetch: fetch });
+
+    await provider.initialize();
+
+    const hook = provider.hooks[0];
+    hook.finally?.(
+      { flagKey: 'my-bool' } as any,
+      {
+        flagKey: 'my-bool',
+        value: true,
+        reason: 'STATIC',
+        variant: 'on',
+        flagMetadata: { version: '1741780800' },
+      } as any,
+    );
+
+    await provider.onClose();
+
+    const metricsCalls = (fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([, init]) => init?.method === 'POST');
+    expect(metricsCalls.length).toBeGreaterThan(0);
+    const body = JSON.parse(String(metricsCalls[0][1]?.body));
+    expect(body.sdkType).toBe('server');
+    expect(body.evaluations).toEqual(
+      expect.arrayContaining([expect.objectContaining({ flagKey: 'my-bool', count: 1 })]),
+    );
   });
 });
