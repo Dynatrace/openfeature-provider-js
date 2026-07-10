@@ -1,6 +1,5 @@
 import type { EvaluationContext, JsonValue, Logger, Provider, ResolutionDetails, Hook } from '@openfeature/server-sdk';
-import { ErrorCode } from '@openfeature/core';
-import { OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk';
+import { ErrorCode, OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk';
 import type { DynatraceProviderOptions } from './options';
 import { resolveProviderOptions } from './options';
 

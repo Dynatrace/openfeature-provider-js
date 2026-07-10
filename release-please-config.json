@@ -10,7 +10,8 @@
       "prerelease": true,
       "prerelease-type": "alpha",
       "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true
+      "bump-patch-for-minor-pre-major": true,
+      "extra-files": ["src/version.ts"]
     },
     "packages/node": {
       "release-type": "node",
@@ -19,7 +20,8 @@
       "prerelease": true,
       "prerelease-type": "alpha",
       "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true
+      "bump-patch-for-minor-pre-major": true,
+      "extra-files": ["src/version.ts"]
     }
   },
   "changelog-sections": [
