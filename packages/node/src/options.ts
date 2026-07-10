@@ -1,15 +1,27 @@
 import { metricsUrlFromOrigin, validateOrigin } from '../../shared/src/origin.js';
 import { buildCdnUrl, buildMetricsUrl, parseSdkKey, publicKey } from '../../shared/src/sdkKey.js';
+import type { FlagdCore } from '@openfeature/flagd-core';
+import type { FetchFn } from './cdnFetcher.js';
 
 export const DEFAULT_METRICS_FLUSH_INTERVAL_MS = 30_000;
 export const DEFAULT_METRICS_SOFT_CAP_DISTINCT_FLAGS = 1_000;
 export const DEFAULT_METRICS_HARD_CAP_DISTINCT_FLAGS = 2_000;
+
+/** @internal Test overrides injected via {@link DynatraceProviderOptions.testHooks}. */
+export interface ProviderTestHooks {
+  flagdCore?: FlagdCore;
+  fetch?: FetchFn;
+  gracePeriodMs?: number;
+  pollIntervalMs?: number;
+}
 
 export interface DynatraceProviderOptions {
   /** Override the config origin (scheme, host, and port; no path, query, or fragment). */
   configOrigin?: string;
   /** Override the metrics origin (scheme, host, and port; no path, query, or fragment). */
   metricsOrigin?: string;
+  /** @internal Injected by tests only. */
+  testHooks?: ProviderTestHooks;
 }
 
 export interface ResolvedProviderOptions {
