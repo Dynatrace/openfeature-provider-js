@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StandardResolutionReasons } from '@openfeature/core';
-import { EvaluationMetricsHook } from './EvaluationMetricsHook';
+import { WebEvaluationMetricsHook } from './WebEvaluationMetricsHook';
+import type { FlushPayload } from '../../../shared/src/metrics/payload';
 import type { EvaluationDetails, FlagValue } from '@openfeature/core';
-import type { FlushPayload } from './EvaluationMetricsHook';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -25,20 +25,19 @@ function makeDetails(
   };
 }
 
-function makeHook(opts?: { flushIntervalMs?: number; maxCapacity?: number }) {
-  return new EvaluationMetricsHook({
+function makeHook(opts?: { flushIntervalMs?: number; maxCapacity?: number; metricsUrl?: string }) {
+  return new WebEvaluationMetricsHook({
     authHeader: AUTH_HEADER,
-    metricsUrl: MOCK_METRICS_URL,
+    metricsUrl: opts?.metricsUrl ?? MOCK_METRICS_URL,
     flushIntervalMs: opts?.flushIntervalMs ?? 30_000,
     maxCapacity: opts?.maxCapacity ?? 5_000,
-    sdkType: 'web',
     sdkVersion: '0.0.0-test',
     providerName: 'dynatrace',
   });
 }
 
-function fireFinally(hook: EvaluationMetricsHook, details: EvaluationDetails<FlagValue>): void {
-  hook.finally?.({} as any, details);
+function fireFinally(hook: WebEvaluationMetricsHook, details: EvaluationDetails<FlagValue>): void {
+  hook.hook.finally?.({} as any, details);
 }
 
 function lastFetchBody(): FlushPayload {
@@ -76,7 +75,7 @@ let mockDoc: MockDoc;
 
 // ── Suite ────────────────────────────────────────────────────────────────────
 
-describe('EvaluationMetricsHook', () => {
+describe('WebEvaluationMetricsHook', () => {
   beforeEach(() => {
     vi.useFakeTimers();
 
@@ -125,34 +124,18 @@ describe('EvaluationMetricsHook', () => {
   describe('metrics endpoint', () => {
     it('uses the configured metrics endpoint', () => {
       const hook = makeHook();
-      expect((hook as any)._metricsEndpoint).toBe(MOCK_METRICS_URL);
+      expect(hook.metricsUrl).toBe(MOCK_METRICS_URL);
     });
 
     it('uses the provided metricsUrl override instead of the default', () => {
-      const hook = new EvaluationMetricsHook({
-        authHeader: AUTH_HEADER,
-        metricsUrl: 'https://my-proxy.example.com/v1/metrics',
-        flushIntervalMs: 30_000,
-        maxCapacity: 5_000,
-        sdkType: 'web',
-        sdkVersion: '0.0.0-test',
-        providerName: 'dynatrace',
-      });
-      expect((hook as any)._metricsEndpoint).toBe('https://my-proxy.example.com/v1/metrics');
+      const hook = makeHook({ metricsUrl: 'https://my-proxy.example.com/v1/metrics' });
+      expect(hook.metricsUrl).toBe('https://my-proxy.example.com/v1/metrics');
       hook.destroy();
     });
 
     it('sends flush requests to the overridden metricsUrl', () => {
       const customUrl = 'https://my-proxy.example.com/v1/metrics';
-      const hook = new EvaluationMetricsHook({
-        authHeader: AUTH_HEADER,
-        metricsUrl: customUrl,
-        flushIntervalMs: 30_000,
-        maxCapacity: 5_000,
-        sdkType: 'web',
-        sdkVersion: '0.0.0-test',
-        providerName: 'dynatrace',
-      });
+      const hook = makeHook({ metricsUrl: customUrl });
 
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       hook.flush();
@@ -164,15 +147,7 @@ describe('EvaluationMetricsHook', () => {
 
     it('sends beacon requests to the overridden metricsUrl on page hide', () => {
       const customUrl = 'https://my-proxy.example.com/v1/metrics';
-      const hook = new EvaluationMetricsHook({
-        authHeader: AUTH_HEADER,
-        metricsUrl: customUrl,
-        flushIntervalMs: 30_000,
-        maxCapacity: 5_000,
-        sdkType: 'web',
-        sdkVersion: '0.0.0-test',
-        providerName: 'dynatrace',
-      });
+      const hook = makeHook({ metricsUrl: customUrl });
 
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       mockDoc.visibilityState = 'hidden';
@@ -198,7 +173,7 @@ describe('EvaluationMetricsHook', () => {
       expect(rec.flagKey).toBe('flag-a');
       expect(rec.variant).toBe('on');
       expect(rec.evaluationReason).toBe('TARGETING_MATCH');
-      expect(rec.errorCode).toBe('');
+      expect(rec.errorCode).toBeUndefined();
       expect(rec.count).toBe(1);
     });
 
@@ -300,7 +275,7 @@ describe('EvaluationMetricsHook', () => {
       fireFinally(hook, makeDetails({ flagKey: 'flag-a', variant: 'on', reason: 'TARGETING_MATCH' }));
       hook.flush();
 
-      expect(lastFetchBody().evaluations[0].errorCode).toBe('');
+      expect(lastFetchBody().evaluations[0].errorCode).toBeUndefined();
     });
   });
 
@@ -483,6 +458,27 @@ describe('EvaluationMetricsHook', () => {
 
       vi.advanceTimersByTime(1);
       expect(globalThis.fetch).toHaveBeenCalledOnce();
+      hook.destroy();
+    });
+
+    it('clamps flushIntervalMs of 0 to 1000ms', () => {
+      const hook = makeHook({ flushIntervalMs: 0 });
+      fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
+
+      vi.advanceTimersByTime(999);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      hook.destroy();
+    });
+
+    it('does not start periodic flush when flushIntervalMs is negative', () => {
+      const hook = makeHook({ flushIntervalMs: -1 });
+      fireFinally(hook, makeDetails({ flagKey: 'f', variant: 'on', reason: 'STATIC' }));
+
+      vi.advanceTimersByTime(60_000);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
       hook.destroy();
     });
 

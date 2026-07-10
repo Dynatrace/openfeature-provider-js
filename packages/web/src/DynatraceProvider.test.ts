@@ -81,17 +81,17 @@ describe('constructor', () => {
 
   it('passes a custom metricsUrl through to the metrics hook', () => {
     const provider = new DynatraceProvider(VALID_KEY_US, { metricsUrl: 'https://my-metrics.example.com/v1/metrics' });
-    expect((provider as any)._metricsHook._metricsEndpoint).toBe('https://my-metrics.example.com/v1/metrics');
+    expect((provider as any)._metricsHook.metricsUrl).toBe('https://my-metrics.example.com/v1/metrics');
   });
 
   it('derives the US metrics endpoint from a US sdkKey when metricsUrl is not provided', () => {
     const provider = new DynatraceProvider(VALID_KEY_US);
-    expect((provider as any)._metricsHook._metricsEndpoint).toBe('https://metrics.us.fm.dynatrace.com/v1/metrics');
+    expect((provider as any)._metricsHook.metricsUrl).toBe('https://metrics.us.fm.dynatrace.com/v1/metrics');
   });
 
   it('derives the EU metrics endpoint from a EU sdkKey when metricsUrl is not provided', () => {
     const provider = new DynatraceProvider(VALID_KEY_EU);
-    expect((provider as any)._metricsHook._metricsEndpoint).toBe('https://metrics.eu.fm.dynatrace.com/v1/metrics');
+    expect((provider as any)._metricsHook.metricsUrl).toBe('https://metrics.eu.fm.dynatrace.com/v1/metrics');
   });
 
   it('defaults pollInterval to -1 (disabled) when not provided', () => {

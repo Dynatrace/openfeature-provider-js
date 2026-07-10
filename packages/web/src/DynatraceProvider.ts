@@ -10,8 +10,8 @@ import type {
   Hook,
 } from '@openfeature/web-sdk';
 import { ClientProviderEvents } from '@openfeature/web-sdk';
-import { EvaluationMetricsHook } from '../../shared/src/EvaluationMetricsHook.js';
 import { buildMetricsUrl, parseSdkKey } from '../../shared/src/sdkKey.js';
+import { WebEvaluationMetricsHook } from './metrics/WebEvaluationMetricsHook.js';
 import { PACKAGE_VERSION } from './version';
 
 export interface DynatraceProviderOptions {
@@ -70,7 +70,7 @@ export class DynatraceProvider implements Provider {
   }
 
   private readonly _inner: OFREPWebProvider;
-  private readonly _metricsHook: EvaluationMetricsHook;
+  private readonly _metricsHook: WebEvaluationMetricsHook;
 
   /**
    * @param sdkKey  Dynatrace web SDK key (`dt01.web_{geo}_...`). Validated immediately.
@@ -89,17 +89,16 @@ export class DynatraceProvider implements Provider {
       headers: [['Authorization', `Bearer ${key}`]],
     });
 
-    this._metricsHook = new EvaluationMetricsHook({
+    this._metricsHook = new WebEvaluationMetricsHook({
       authHeader: `Bearer ${key}`,
       metricsUrl: effectiveMetricsUrl,
       flushIntervalMs,
       maxCapacity,
-      sdkType: 'web',
       sdkVersion: PACKAGE_VERSION,
       providerName: this.metadata.name,
     });
 
-    this.hooks = [this._metricsHook];
+    this.hooks = [this._metricsHook.hook];
 
     this._inner.events?.addHandler?.(ClientProviderEvents.ConfigurationChanged, () => {
       this._metricsHook.flush();
