@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.5-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.4-alpha...openfeature-provider-web-v0.2.5-alpha) (2026-07-14)
+
+
+### ✨ New Features
+
+* bump upstream web provider to enable SSE. ([#18](https://github.com/Dynatrace/openfeature-provider-js/issues/18)) ([ef9a355](https://github.com/Dynatrace/openfeature-provider-js/commit/ef9a35539eb9c55be7b0581a21dff160481e0ac9))
+* scaffold node provider package ([#13](https://github.com/Dynatrace/openfeature-provider-js/issues/13)) ([c773d09](https://github.com/Dynatrace/openfeature-provider-js/commit/c773d099ce3d11adf96d54db6b03109f24119571))
+
+
+### 🧹 Chore
+
+* **deps-dev:** Bump vite in /packages/web/examples/react-app ([#7](https://github.com/Dynatrace/openfeature-provider-js/issues/7)) ([1200145](https://github.com/Dynatrace/openfeature-provider-js/commit/1200145fa9026fe12966bd3454e8ff64a635966f))
+
+
+### 🔄 Refactoring
+
+* extract shared SDK key parsing and URL helpers ([#11](https://github.com/Dynatrace/openfeature-provider-js/issues/11)) ([4e805b7](https://github.com/Dynatrace/openfeature-provider-js/commit/4e805b71197647d867c65d5a81d8f0336dee2afb))
+* split shared metrics core from browser transport ([#12](https://github.com/Dynatrace/openfeature-provider-js/issues/12)) ([e77dc2a](https://github.com/Dynatrace/openfeature-provider-js/commit/e77dc2a98c51889932298b7d3f28283dc83e4f52))
+
 ## [0.2.4-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.3-alpha...openfeature-provider-web-v0.2.4-alpha) (2026-06-19)
 
 
