@@ -48,7 +48,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@openfeature/ofrep-web-provider": "^0.3.6"
+    "@openfeature/ofrep-web-provider": "^0.4.1"
   },
   "peerDependencies": {
     "@openfeature/web-sdk": "^1.4.0"
