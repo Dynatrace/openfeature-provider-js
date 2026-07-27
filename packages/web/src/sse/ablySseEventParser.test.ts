@@ -52,10 +52,20 @@ describe('parseAblySseEvent', () => {
     expect(parseAblySseEvent(messageEvent(frame))).toEqual(payload);
   });
 
-  it('throws when the nested data payload is missing', () => {
+  // Forward compatibility: if the Ably double-nesting is ever absent, the
+  // parser must not throw. It falls back to defaultSseEventParser so an
+  // unrecognized shape is handled gracefully rather than crashing.
+  it('falls back to the default parser when the nested data payload is missing (object frame)', () => {
     const frame = { id: 'x', event: 'message', data: { name: 'eventName' } };
 
-    expect(() => parseAblySseEvent(messageEvent(frame))).toThrow(/missing nested data payload/);
+    // Object frames are returned as-is by defaultSseEventParser.
+    expect(parseAblySseEvent(messageEvent(frame))).toEqual(frame);
+  });
+
+  it('falls back to the default parser for an un-nested OFREP message (string frame)', () => {
+    const payload = { type: 'refetchEvaluation', etag: 'z' };
+
+    expect(parseAblySseEvent(messageEvent(JSON.stringify(payload)))).toEqual(payload);
   });
 
   it('throws on a malformed JSON frame', () => {
