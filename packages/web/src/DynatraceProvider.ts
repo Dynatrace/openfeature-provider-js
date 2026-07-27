@@ -12,6 +12,7 @@ import type {
 import { ClientProviderEvents } from '@openfeature/web-sdk';
 import { buildMetricsUrl, parseSdkKey } from '../../shared/src/sdkKey.js';
 import { WebEvaluationMetricsHook } from './metrics/WebEvaluationMetricsHook.js';
+import { parseAblySseEvent } from './sse/ablySseEventParser.js';
 import { PACKAGE_VERSION } from './version';
 
 export interface DynatraceProviderOptions {
@@ -87,6 +88,7 @@ export class DynatraceProvider implements Provider {
       baseUrl: effectiveApiOrigin,
       pollInterval: effectivePollInterval,
       headers: [['Authorization', `Bearer ${key}`]],
+      sseEventParser: parseAblySseEvent,
     });
 
     this._metricsHook = new WebEvaluationMetricsHook({
