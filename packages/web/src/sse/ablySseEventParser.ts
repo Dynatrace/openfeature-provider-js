@@ -32,7 +32,8 @@ export function parseAblySseEvent(event: MessageEvent): EventStreamMessage {
   // Ably envelope carries the real OFREP payload in its own nested `data`.
   const payload = frame?.data?.data;
   if (payload === undefined) {
-    throw new Error('Ably SSE event missing nested data payload');
+    // Changes in format should be handled safely. This means that changing the format should not cause errors.
+    return defaultSseEventParser(event); // fallback to default parser for error handling
   }
 
   // defaultSseEventParser JSON-parses when the payload is a string, otherwise
