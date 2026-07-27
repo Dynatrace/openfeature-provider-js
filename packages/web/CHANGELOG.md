@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.6-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.5-alpha...openfeature-provider-web-v0.2.6-alpha) (2026-07-27)
+
+
+### 🐛 Bug Fixes
+
+* ICP-7735: Use Ably parser for message formats. ([#19](https://github.com/Dynatrace/openfeature-provider-js/issues/19)) ([3e445c8](https://github.com/Dynatrace/openfeature-provider-js/commit/3e445c87062c710dd59f9e71ee9f54f19c6f4729))
+
 ## [0.2.5-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.4-alpha...openfeature-provider-web-v0.2.5-alpha) (2026-07-14)
 
 
