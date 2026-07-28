@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.7-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.6-alpha...openfeature-provider-web-v0.2.7-alpha) (2026-07-28)
+
+
+### 🐛 Bug Fixes
+
+* ICP-7735: handle string SSE data - [#21](https://github.com/Dynatrace/openfeature-provider-js/issues/21) ([#21](https://github.com/Dynatrace/openfeature-provider-js/issues/21)) ([f8a9e8e](https://github.com/Dynatrace/openfeature-provider-js/commit/f8a9e8e418acf293a08392a102711701c64cda9c))
+
 ## [0.2.6-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.5-alpha...openfeature-provider-web-v0.2.6-alpha) (2026-07-27)
 
 
