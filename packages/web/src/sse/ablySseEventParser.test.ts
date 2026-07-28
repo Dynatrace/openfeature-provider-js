@@ -1,14 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { parseAblySseEvent } from './ablySseEventParser';
 
-// Mirrors a real Ably SSE frame: an outer envelope whose nested `data` holds
-// the Ably message, whose own `data` field is the OFREP payload JSON string.
+const OFREP_PAYLOAD = {
+  type: 'refetchEvaluation',
+  etag: '75cf69180d3293db1b0159552a3717b3',
+  lastModified: 1785246614400,
+};
+
+const OFREP_PAYLOAD_STRING = JSON.stringify(OFREP_PAYLOAD);
+
+// real Ably channel SSE frame; OFREP payload is JSON-stringified in frame.data
 const RAW_ABLY_FRAME = {
-  id: 'S!01785167329117-000@e7dFffJYwC4xnJ62536038^UbpHtA',
-  event: 'message',
-  data: {
-    data: '{"key":true}',
-  },
+  id: 'C-pn5DV3ix:0:0',
+  timestamp: 1785246620349,
+  name: 'refetchEvaluation',
+  channel: 'dt01.web_us_7m5eaqtwks.26541359b212661389752fc11f672945baa7d49eaa226ba4541261d13e77b3bf',
+  action: 0,
+  serial: '01785246620349-000@6f8qluzewC54LH88841174:000',
+  data: OFREP_PAYLOAD_STRING,
 };
 
 function messageEvent(data: unknown): MessageEvent {
@@ -16,56 +25,16 @@ function messageEvent(data: unknown): MessageEvent {
 }
 
 describe('parseAblySseEvent', () => {
-  it('unwraps the double-nested Ably data when the frame is a JSON string', () => {
-    const event = messageEvent(JSON.stringify(RAW_ABLY_FRAME));
-
-    expect(parseAblySseEvent(event)).toEqual({ key: true });
+  it('unwraps the Ably channel SSE frame when the event data is a JSON string', () => {
+    expect(parseAblySseEvent(messageEvent(JSON.stringify(RAW_ABLY_FRAME)))).toEqual(OFREP_PAYLOAD);
   });
 
-  it('unwraps the double-nested Ably data when the frame is an object', () => {
-    const event = messageEvent(RAW_ABLY_FRAME);
-
-    expect(parseAblySseEvent(event)).toEqual({ key: true });
+  it('unwraps the Ably channel SSE frame when the event data is already an object', () => {
+    expect(parseAblySseEvent(messageEvent(RAW_ABLY_FRAME))).toEqual(OFREP_PAYLOAD);
   });
 
-  it('parses a realistic refetchEvaluation payload', () => {
-    const payload = {
-      type: 'refetchEvaluation',
-      etag: 'W/"abc123"',
-      lastModified: 1785167329090,
-    };
-    const frame = {
-      ...RAW_ABLY_FRAME,
-      data: { ...RAW_ABLY_FRAME.data, data: JSON.stringify(payload) },
-    };
-
-    expect(parseAblySseEvent(messageEvent(JSON.stringify(frame)))).toEqual(payload);
-  });
-
-  it('returns the nested payload as-is when it is already an object', () => {
-    const payload = { type: 'refetchEvaluation', etag: 'v2' };
-    const frame = {
-      ...RAW_ABLY_FRAME,
-      data: { ...RAW_ABLY_FRAME.data, data: payload },
-    };
-
-    expect(parseAblySseEvent(messageEvent(frame))).toEqual(payload);
-  });
-
-  // Forward compatibility: if the Ably double-nesting is ever absent, the
-  // parser must not throw. It falls back to defaultSseEventParser so an
-  // unrecognized shape is handled gracefully rather than crashing.
-  it('falls back to the default parser when the nested data payload is missing (object frame)', () => {
-    const frame = { id: 'x', event: 'message', data: { name: 'eventName' } };
-
-    // Object frames are returned as-is by defaultSseEventParser.
-    expect(parseAblySseEvent(messageEvent(frame))).toEqual(frame);
-  });
-
-  it('falls back to the default parser for an un-nested OFREP message (string frame)', () => {
-    const payload = { type: 'refetchEvaluation', etag: 'z' };
-
-    expect(parseAblySseEvent(messageEvent(JSON.stringify(payload)))).toEqual(payload);
+  it('falls back to the default parser for an un-nested OFREP message (no Ably envelope)', () => {
+    expect(parseAblySseEvent(messageEvent(OFREP_PAYLOAD_STRING))).toEqual(OFREP_PAYLOAD);
   });
 
   it('throws on a malformed JSON frame', () => {
