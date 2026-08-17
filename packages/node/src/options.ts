@@ -36,10 +36,8 @@ export function resolveProviderOptions(
     }
   }
 
-  const configOrigin = options.configOrigin?.trim();
-  if (configOrigin != null) {
-    validateConfigOrigin(configOrigin);
-  }
+  const trimmedOrigin = options.configOrigin?.trim();
+  const configOrigin = trimmedOrigin != null ? normaliseConfigOrigin(trimmedOrigin) : undefined;
 
   const cdnUrl = buildCdnUrl(trimmedKey, parsed.platform, parsed.geo, configOrigin);
   const metricsUrl = options.metricsUrl?.trim() ?? buildMetricsUrl(parsed.geo);
@@ -52,7 +50,14 @@ export function resolveProviderOptions(
   };
 }
 
-function validateConfigOrigin(origin: string): void {
+/**
+ * Validates that `origin` is a bare origin and returns it in canonical form.
+ *
+ * Returning `url.origin` rather than the caller's string drops any redundant
+ * trailing slash and normalises the scheme and host case, while keeping the
+ * brackets around an IPv6 literal intact.
+ */
+function normaliseConfigOrigin(origin: string): string {
   let url: URL;
   try {
     url = new URL(origin);
@@ -71,4 +76,8 @@ function validateConfigOrigin(origin: string): void {
   if (url.hash) {
     throw new Error(`configOrigin must not include a fragment; got: "${origin}"`);
   }
+  if (url.username || url.password) {
+    throw new Error(`configOrigin must not include user info; got: "${origin}"`);
+  }
+  return url.origin;
 }

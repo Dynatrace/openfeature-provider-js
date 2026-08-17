@@ -61,6 +61,24 @@ describe('resolveProviderOptions', () => {
     );
   });
 
+  it('rejects configOrigin with user info', () => {
+    expect(() =>
+      resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: 'https://user:pass@cdn.example.com' }),
+    ).toThrow('configOrigin must not include user info');
+  });
+
+  it.each([
+    ['http://localhost:8080', 'http://localhost:8080'],
+    ['https://cdn.example.com/', 'https://cdn.example.com'],
+    ['HTTPS://CDN.Example.com', 'https://cdn.example.com'],
+    // IPv6 literals must keep their brackets, or the URL is unusable.
+    ['http://[::1]:8080', 'http://[::1]:8080'],
+    ['https://[2001:db8::1]', 'https://[2001:db8::1]'],
+  ])('normalises configOrigin %s', (origin, expected) => {
+    const opts = resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: origin });
+    expect(opts.cdnUrl).toBe(`${expected}/server/${VALID_SERVER_KEY}.json`);
+  });
+
   it('rejects configOrigin with a non-http(s) scheme', () => {
     expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: 'ftp://cdn.example.com' })).toThrow(
       'configOrigin must use http or https',
