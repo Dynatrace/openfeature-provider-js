@@ -61,12 +61,6 @@ describe('resolveProviderOptions', () => {
     );
   });
 
-  it('rejects configOrigin with user info', () => {
-    expect(() =>
-      resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: 'https://user:pass@cdn.example.com' }),
-    ).toThrow('configOrigin must not include user info');
-  });
-
   it.each([
     ['http://localhost:8080', 'http://localhost:8080'],
     ['https://cdn.example.com/', 'https://cdn.example.com'],

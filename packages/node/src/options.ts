@@ -76,8 +76,5 @@ function normaliseConfigOrigin(origin: string): string {
   if (url.hash) {
     throw new Error(`configOrigin must not include a fragment; got: "${origin}"`);
   }
-  if (url.username || url.password) {
-    throw new Error(`configOrigin must not include user info; got: "${origin}"`);
-  }
   return url.origin;
 }
