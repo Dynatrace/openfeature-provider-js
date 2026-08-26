@@ -1,6 +1,8 @@
 export { parseSdkKey, publicKey, buildMetricsUrl, buildCdnUrl } from './sdkKey';
 export type { ParsedSdkKey, SdkKeyPlatform } from './sdkKey';
 
+export { validateOrigin, metricsUrlFromOrigin, METRICS_INGEST_PATH } from './origin';
+
 export { MetricsAggregator } from './metrics/aggregator';
 export type { DrainedBatch, DrainedBucket, EvaluationMetricKey, MetricsAggregatorOptions } from './metrics/aggregator';
 

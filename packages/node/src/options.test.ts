@@ -31,9 +31,9 @@ describe('resolveProviderOptions', () => {
     expect(opts.cdnUrl).toBe(`https://cdn.example.com:443/server/${VALID_SERVER_KEY}.json`);
   });
 
-  it('uses metricsUrl override', () => {
+  it('uses metricsOrigin override', () => {
     const opts = resolveProviderOptions(VALID_SERVER_KEY, {
-      metricsUrl: 'https://metrics.example.com/v1/metrics',
+      metricsOrigin: 'https://metrics.example.com',
     });
     expect(opts.metricsUrl).toBe('https://metrics.example.com/v1/metrics');
   });
@@ -56,9 +56,15 @@ describe('resolveProviderOptions', () => {
     );
   });
 
-  it('rejects explicit null metricsUrl', () => {
-    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { metricsUrl: null as unknown as string })).toThrow(
-      'metricsUrl must not be null or blank',
+  it('rejects explicit null metricsOrigin', () => {
+    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { metricsOrigin: null as unknown as string })).toThrow(
+      'metricsOrigin must not be null or blank',
     );
+  });
+
+  it('rejects metricsOrigin with a path', () => {
+    expect(() =>
+      resolveProviderOptions(VALID_SERVER_KEY, { metricsOrigin: 'https://metrics.example.com/v1/metrics' }),
+    ).toThrow('metricsOrigin must not include a path');
   });
 });
