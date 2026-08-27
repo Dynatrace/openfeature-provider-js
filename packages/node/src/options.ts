@@ -36,10 +36,8 @@ export function resolveProviderOptions(
     }
   }
 
-  const configOrigin = options.configOrigin?.trim();
-  if (configOrigin != null) {
-    validateConfigOrigin(configOrigin);
-  }
+  const trimmedOrigin = options.configOrigin?.trim();
+  const configOrigin = trimmedOrigin != null ? normalizeConfigOrigin(trimmedOrigin) : undefined;
 
   const cdnUrl = buildCdnUrl(trimmedKey, parsed.platform, parsed.geo, configOrigin);
   const metricsUrl = options.metricsUrl?.trim() ?? buildMetricsUrl(parsed.geo);
@@ -52,7 +50,55 @@ export function resolveProviderOptions(
   };
 }
 
-function validateConfigOrigin(origin: string): void {
+/**
+ * Path (and only the path) after the authority in `value`.
+ *
+ * WHATWG `URL.pathname` resolves `..` and collapses some slash forms, so a
+ * raw split is what makes `https://host/..` and `https://host//` reject the
+ * same way as the RFC parsers in Java, Go, and Python.
+ */
+function pathAfterAuthority(value: string): string {
+  const sep = value.indexOf('://');
+  const rest = sep < 0 ? value : value.slice(sep + 3);
+  let i = 0;
+  if (rest.startsWith('[')) {
+    const close = rest.indexOf(']');
+    if (close < 0) {
+      return rest;
+    }
+    i = close + 1;
+    if (rest[i] === ':') {
+      i += 1;
+      while (i < rest.length && rest[i] >= '0' && rest[i] <= '9') {
+        i += 1;
+      }
+    }
+  } else {
+    while (i < rest.length && rest[i] !== '/' && rest[i] !== '?' && rest[i] !== '#') {
+      i += 1;
+    }
+  }
+  let end = i;
+  while (end < rest.length && rest[end] !== '?' && rest[end] !== '#') {
+    end += 1;
+  }
+  return rest.slice(i, end);
+}
+
+function authorityOf(value: string): string {
+  const sep = value.indexOf('://');
+  const rest = sep < 0 ? value : value.slice(sep + 3);
+  const q = rest.search(/[/?#]/);
+  return q < 0 ? rest : rest.slice(0, q);
+}
+
+/**
+ * Validates that `origin` is a bare origin and returns it in canonical form.
+ *
+ * Explicit default ports (`:443`, `:80`) are kept. WHATWG `url.origin` would
+ * drop them.
+ */
+function normalizeConfigOrigin(origin: string): string {
   let url: URL;
   try {
     url = new URL(origin);
@@ -62,7 +108,14 @@ function validateConfigOrigin(origin: string): void {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error(`configOrigin must use http or https; got: "${origin}"`);
   }
-  if (url.pathname && url.pathname !== '/') {
+  if (!url.hostname) {
+    throw new Error(`configOrigin must include a host; got: "${origin}"`);
+  }
+  if (url.username || url.password) {
+    throw new Error(`configOrigin must not include user info; got: "${origin}"`);
+  }
+  const path = pathAfterAuthority(origin);
+  if (path && path !== '/') {
     throw new Error(`configOrigin must not include a path; got: "${origin}"`);
   }
   if (url.search) {
@@ -71,4 +124,6 @@ function validateConfigOrigin(origin: string): void {
   if (url.hash) {
     throw new Error(`configOrigin must not include a fragment; got: "${origin}"`);
   }
+  const protocol = url.protocol === 'http:' ? 'http' : 'https';
+  return `${protocol}://${authorityOf(origin).toLowerCase()}`;
 }
