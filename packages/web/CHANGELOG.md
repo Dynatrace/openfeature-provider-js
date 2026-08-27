@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.7-alpha...openfeature-provider-web-v0.3.0-alpha) (2026-08-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename metricsUrl to metricsOrigin, accept origin-only value ([#28](https://github.com/Dynatrace/openfeature-provider-js/issues/28))
+
+### ✨ New Features
+
+* rename metricsUrl to metricsOrigin, accept origin-only value ([#28](https://github.com/Dynatrace/openfeature-provider-js/issues/28)) ([28f5a14](https://github.com/Dynatrace/openfeature-provider-js/commit/28f5a144dbe27d841406eb042ad90efb2aeb9214))
+
 ## [0.2.7-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.6-alpha...openfeature-provider-web-v0.2.7-alpha) (2026-07-28)
 
 
