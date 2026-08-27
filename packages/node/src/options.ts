@@ -37,7 +37,7 @@ export function resolveProviderOptions(
   }
 
   const trimmedOrigin = options.configOrigin?.trim();
-  const configOrigin = trimmedOrigin != null ? normaliseConfigOrigin(trimmedOrigin) : undefined;
+  const configOrigin = trimmedOrigin != null ? normalizeConfigOrigin(trimmedOrigin) : undefined;
 
   const cdnUrl = buildCdnUrl(trimmedKey, parsed.platform, parsed.geo, configOrigin);
   const metricsUrl = options.metricsUrl?.trim() ?? buildMetricsUrl(parsed.geo);
@@ -98,7 +98,7 @@ function authorityOf(value: string): string {
  * Explicit default ports (`:443`, `:80`) are kept. WHATWG `url.origin` would
  * drop them.
  */
-function normaliseConfigOrigin(origin: string): string {
+function normalizeConfigOrigin(origin: string): string {
   let url: URL;
   try {
     url = new URL(origin);
