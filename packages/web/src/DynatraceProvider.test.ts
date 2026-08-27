@@ -79,17 +79,29 @@ describe('constructor', () => {
     expect(OFREPWebProvider).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: 'https://custom.example.com' }));
   });
 
-  it('passes a custom metricsUrl through to the metrics hook', () => {
-    const provider = new DynatraceProvider(VALID_KEY_US, { metricsUrl: 'https://my-metrics.example.com/v1/metrics' });
+  it('passes a custom metricsOrigin through to the metrics hook as a full ingest URL', () => {
+    const provider = new DynatraceProvider(VALID_KEY_US, { metricsOrigin: 'https://my-metrics.example.com' });
     expect((provider as any)._metricsHook.metricsUrl).toBe('https://my-metrics.example.com/v1/metrics');
   });
 
-  it('derives the US metrics endpoint from a US sdkKey when metricsUrl is not provided', () => {
+  it('rejects metricsOrigin with a path', () => {
+    expect(
+      () => new DynatraceProvider(VALID_KEY_US, { metricsOrigin: 'https://my-metrics.example.com/v1/metrics' }),
+    ).toThrow('metricsOrigin must not include a path');
+  });
+
+  it('rejects explicit null metricsOrigin', () => {
+    expect(() => new DynatraceProvider(VALID_KEY_US, { metricsOrigin: null as unknown as string })).toThrow(
+      'metricsOrigin must not be null or blank',
+    );
+  });
+
+  it('derives the US metrics endpoint from a US sdkKey when metricsOrigin is not provided', () => {
     const provider = new DynatraceProvider(VALID_KEY_US);
     expect((provider as any)._metricsHook.metricsUrl).toBe('https://metrics.us.fm.dynatrace.com/v1/metrics');
   });
 
-  it('derives the EU metrics endpoint from a EU sdkKey when metricsUrl is not provided', () => {
+  it('derives the EU metrics endpoint from a EU sdkKey when metricsOrigin is not provided', () => {
     const provider = new DynatraceProvider(VALID_KEY_EU);
     expect((provider as any)._metricsHook.metricsUrl).toBe('https://metrics.eu.fm.dynatrace.com/v1/metrics');
   });

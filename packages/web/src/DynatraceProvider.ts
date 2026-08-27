@@ -10,6 +10,7 @@ import type {
   Hook,
 } from '@openfeature/web-sdk';
 import { ClientProviderEvents } from '@openfeature/web-sdk';
+import { metricsUrlFromOrigin } from '../../shared/src/origin.js';
 import { buildMetricsUrl, parseSdkKey } from '../../shared/src/sdkKey.js';
 import { WebEvaluationMetricsHook } from './metrics/WebEvaluationMetricsHook.js';
 import { parseAblySseEvent } from './sse/ablySseEventParser.js';
@@ -22,10 +23,10 @@ export interface DynatraceProviderOptions {
    */
   apiOrigin?: string;
   /**
-   * Override the metrics ingest endpoint URL.
+   * Override the metrics origin (scheme, host, and port; no path, query, or fragment).
    * When omitted the default Dynatrace metrics ingest URL is used.
    */
-  metricsUrl?: string;
+  metricsOrigin?: string;
   /**
    * Poll interval in milliseconds. Defaults to `-1` (disabled).
    * Values less than 1000ms are clamped to 1000ms.
@@ -81,7 +82,8 @@ export class DynatraceProvider implements Provider {
     const { apiOrigin, pollInterval = -1, flushIntervalMs, maxCapacity } = options ?? {};
     const { geo, key } = parseSdkKey(sdkKey, 'web');
     const effectiveApiOrigin = apiOrigin ?? buildApiOrigin(geo);
-    const effectiveMetricsUrl = options?.metricsUrl ?? buildMetricsUrl(geo);
+    const effectiveMetricsUrl =
+      options?.metricsOrigin !== undefined ? metricsUrlFromOrigin(options.metricsOrigin) : buildMetricsUrl(geo);
     const effectivePollInterval = pollInterval !== -1 ? Math.max(pollInterval, 1000) : -1;
 
     this._inner = new OFREPWebProvider({
