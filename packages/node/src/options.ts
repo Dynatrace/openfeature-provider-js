@@ -51,11 +51,52 @@ export function resolveProviderOptions(
 }
 
 /**
+ * Path (and only the path) after the authority in `value`.
+ *
+ * WHATWG `URL.pathname` resolves `..` and collapses some slash forms, so a
+ * raw split is what makes `https://host/..` and `https://host//` reject the
+ * same way as the RFC parsers in Java, Go, and Python.
+ */
+function pathAfterAuthority(value: string): string {
+  const sep = value.indexOf('://');
+  const rest = sep < 0 ? value : value.slice(sep + 3);
+  let i = 0;
+  if (rest.startsWith('[')) {
+    const close = rest.indexOf(']');
+    if (close < 0) {
+      return rest;
+    }
+    i = close + 1;
+    if (rest[i] === ':') {
+      i += 1;
+      while (i < rest.length && rest[i] >= '0' && rest[i] <= '9') {
+        i += 1;
+      }
+    }
+  } else {
+    while (i < rest.length && rest[i] !== '/' && rest[i] !== '?' && rest[i] !== '#') {
+      i += 1;
+    }
+  }
+  let end = i;
+  while (end < rest.length && rest[end] !== '?' && rest[end] !== '#') {
+    end += 1;
+  }
+  return rest.slice(i, end);
+}
+
+function authorityOf(value: string): string {
+  const sep = value.indexOf('://');
+  const rest = sep < 0 ? value : value.slice(sep + 3);
+  const q = rest.search(/[/?#]/);
+  return q < 0 ? rest : rest.slice(0, q);
+}
+
+/**
  * Validates that `origin` is a bare origin and returns it in canonical form.
  *
- * Returning `url.origin` rather than the caller's string drops any redundant
- * trailing slash and normalises the scheme and host case, while keeping the
- * brackets around an IPv6 literal intact.
+ * Explicit default ports (`:443`, `:80`) are kept. WHATWG `url.origin` would
+ * drop them.
  */
 function normaliseConfigOrigin(origin: string): string {
   let url: URL;
@@ -67,7 +108,14 @@ function normaliseConfigOrigin(origin: string): string {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error(`configOrigin must use http or https; got: "${origin}"`);
   }
-  if (url.pathname && url.pathname !== '/') {
+  if (!url.hostname) {
+    throw new Error(`configOrigin must include a host; got: "${origin}"`);
+  }
+  if (url.username || url.password) {
+    throw new Error(`configOrigin must not include user info; got: "${origin}"`);
+  }
+  const path = pathAfterAuthority(origin);
+  if (path && path !== '/') {
     throw new Error(`configOrigin must not include a path; got: "${origin}"`);
   }
   if (url.search) {
@@ -76,8 +124,6 @@ function normaliseConfigOrigin(origin: string): string {
   if (url.hash) {
     throw new Error(`configOrigin must not include a fragment; got: "${origin}"`);
   }
-  if (url.username || url.password) {
-    throw new Error(`configOrigin must not include user info; got: "${origin}"`);
-  }
-  return url.origin;
+  const protocol = url.protocol === 'http:' ? 'http' : 'https';
+  return `${protocol}://${authorityOf(origin).toLowerCase()}`;
 }

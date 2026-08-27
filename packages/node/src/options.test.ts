@@ -24,6 +24,13 @@ describe('resolveProviderOptions', () => {
     expect(opts.cdnUrl).toBe(`https://cdn.eu.fm.dynatracelabs.com/server/${VALID_SERVER_KEY}.json`);
   });
 
+  it('keeps an explicit default port on configOrigin', () => {
+    const opts = resolveProviderOptions(VALID_SERVER_KEY, {
+      configOrigin: 'https://cdn.example.com:443',
+    });
+    expect(opts.cdnUrl).toBe(`https://cdn.example.com:443/server/${VALID_SERVER_KEY}.json`);
+  });
+
   it('uses metricsUrl override', () => {
     const opts = resolveProviderOptions(VALID_SERVER_KEY, {
       metricsUrl: 'https://metrics.example.com/v1/metrics',
@@ -32,9 +39,15 @@ describe('resolveProviderOptions', () => {
   });
 
   it('rejects configOrigin with a path', () => {
-    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: 'https://cdn.example.com/server' })).toThrow(
-      'configOrigin must not include a path',
-    );
+    for (const origin of [
+      'https://cdn.example.com/server',
+      'https://cdn.example.com//',
+      'https://cdn.example.com/..',
+    ]) {
+      expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: origin })).toThrow(
+        'configOrigin must not include a path',
+      );
+    }
   });
 
   it('rejects explicit null configOrigin', () => {
