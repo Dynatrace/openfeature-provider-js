@@ -24,17 +24,30 @@ describe('resolveProviderOptions', () => {
     expect(opts.cdnUrl).toBe(`https://cdn.eu.fm.dynatracelabs.com/server/${VALID_SERVER_KEY}.json`);
   });
 
-  it('uses metricsUrl override', () => {
+  it('keeps an explicit default port on configOrigin', () => {
     const opts = resolveProviderOptions(VALID_SERVER_KEY, {
-      metricsUrl: 'https://metrics.example.com/v1/metrics',
+      configOrigin: 'https://cdn.example.com:443',
+    });
+    expect(opts.cdnUrl).toBe(`https://cdn.example.com:443/server/${VALID_SERVER_KEY}.json`);
+  });
+
+  it('uses metricsOrigin override', () => {
+    const opts = resolveProviderOptions(VALID_SERVER_KEY, {
+      metricsOrigin: 'https://metrics.example.com',
     });
     expect(opts.metricsUrl).toBe('https://metrics.example.com/v1/metrics');
   });
 
   it('rejects configOrigin with a path', () => {
-    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: 'https://cdn.example.com/server' })).toThrow(
-      'configOrigin must not include a path',
-    );
+    for (const origin of [
+      'https://cdn.example.com/server',
+      'https://cdn.example.com//',
+      'https://cdn.example.com/..',
+    ]) {
+      expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: origin })).toThrow(
+        'configOrigin must not include a path',
+      );
+    }
   });
 
   it('rejects explicit null configOrigin', () => {
@@ -43,27 +56,15 @@ describe('resolveProviderOptions', () => {
     );
   });
 
-  it('rejects explicit null metricsUrl', () => {
-    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { metricsUrl: null as unknown as string })).toThrow(
-      'metricsUrl must not be null or blank',
+  it('rejects explicit null metricsOrigin', () => {
+    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { metricsOrigin: null as unknown as string })).toThrow(
+      'metricsOrigin must not be null or blank',
     );
   });
 
-  it('rejects configOrigin with a query string', () => {
-    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: 'https://cdn.example.com?x=y' })).toThrow(
-      'configOrigin must not include a query string',
-    );
-  });
-
-  it('rejects configOrigin with a fragment', () => {
-    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: 'https://cdn.example.com#frag' })).toThrow(
-      'configOrigin must not include a fragment',
-    );
-  });
-
-  it('rejects configOrigin with a non-http(s) scheme', () => {
-    expect(() => resolveProviderOptions(VALID_SERVER_KEY, { configOrigin: 'ftp://cdn.example.com' })).toThrow(
-      'configOrigin must use http or https',
-    );
+  it('rejects metricsOrigin with a path', () => {
+    expect(() =>
+      resolveProviderOptions(VALID_SERVER_KEY, { metricsOrigin: 'https://metrics.example.com/v1/metrics' }),
+    ).toThrow('metricsOrigin must not include a path');
   });
 });

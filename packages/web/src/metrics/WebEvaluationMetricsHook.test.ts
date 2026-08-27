@@ -127,13 +127,13 @@ describe('WebEvaluationMetricsHook', () => {
       expect(hook.metricsUrl).toBe(MOCK_METRICS_URL);
     });
 
-    it('uses the provided metricsUrl override instead of the default', () => {
+    it('uses the provided full ingest URL instead of the default', () => {
       const hook = makeHook({ metricsUrl: 'https://my-proxy.example.com/v1/metrics' });
       expect(hook.metricsUrl).toBe('https://my-proxy.example.com/v1/metrics');
       hook.destroy();
     });
 
-    it('sends flush requests to the overridden metricsUrl', () => {
+    it('sends flush requests to the configured ingest URL', () => {
       const customUrl = 'https://my-proxy.example.com/v1/metrics';
       const hook = makeHook({ metricsUrl: customUrl });
 
@@ -145,7 +145,7 @@ describe('WebEvaluationMetricsHook', () => {
       hook.destroy();
     });
 
-    it('sends beacon requests to the overridden metricsUrl on page hide', () => {
+    it('sends beacon requests to the configured ingest URL on page hide', () => {
       const customUrl = 'https://my-proxy.example.com/v1/metrics';
       const hook = makeHook({ metricsUrl: customUrl });
 
