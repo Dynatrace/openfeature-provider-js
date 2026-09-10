@@ -21,7 +21,7 @@ import { DynatraceProvider } from '@dynatrace/openfeature-provider-node';
 await OpenFeature.setProviderAndWait(new DynatraceProvider(process.env.DT_SDK_KEY!));
 
 const client = OpenFeature.getClient();
-const enabled = await client.getBooleanValue('my-feature', false, { targetingKey: 'user-123' });
+const enabled = await client.getBooleanValue('my-flag', false, { targetingKey: 'user-123' });
 
 // On shutdown:
 await OpenFeature.close();
