@@ -1,10 +1,10 @@
-# @dynatrace/openfeature-provider-web
+# Dynatrace OpenFeature Provider for Web
 
-The official Dynatrace OpenFeature provider for web.
+The official [Dynatrace](https://dynatrace.com) [OpenFeature](https://openfeature.dev) provider for web browsers.
 
-> **Questions, comments or suggestions?** Reach out to [cobi.druxerman@dynatrace.com](mailto:cobi.druxerman@dynatrace.com).
+The provider evaluates flags remotely: it fetches all flag values for the current evaluation context in a single bulk request, then serves evaluations from that cache and refetches when the context changes.
 
----
+> **Status:** Early alpha — not yet ready for production use.
 
 ## Installation
 
@@ -13,87 +13,50 @@ npm install @dynatrace/openfeature-provider-web @openfeature/web-sdk
 ```
 
 ```bash
-# yarn requires manual installation of peer-dependencies
+# yarn requires manual installation of the @openfeature/core peer dependency
 yarn add @dynatrace/openfeature-provider-web @openfeature/web-sdk @openfeature/core
 ```
 
----
-
-## Configuration
-
-The provider is constructed with the SDK key as the first argument and optional
-overrides as the second:
-
-```ts
-new DynatraceProvider(sdkKey, options?);
-```
-
-| Option            | Type     | Default          | Description                                                                                                                                                                  |
-| ----------------- | -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apiOrigin`       | `string` | derived from key | Override the OFREP API origin. When omitted, derived from the `geo` segment of the SDK key.                                                                                  |
-| `metricsOrigin`   | `string` | derived from key | Override the metrics origin (scheme, host, optional port; no path). The provider appends `/v1/metrics`. When omitted, derived from the SDK key geo.                          |
-| `pollInterval`    | `number` | `-1` (disabled)  | How often (ms) the provider polls for updated flags. Set to `-1` or omit to rely solely on context-change refetches. The minimum polling interval that can be set is 1000ms. |
-| `flushIntervalMs` | `number` | `30_000`         | How often accumulated evaluation metrics are flushed. Values between 0 and 999 are clamped to 1000ms. Pass a negative number to disable periodic flushing.                   |
-| `maxCapacity`     | `number` | `5_000`          | Maximum number of distinct aggregate-map entries before a capacity flush is triggered.                                                                                       |
-
-The SDK key (e.g. `dt01.web_us_…`) is required as the first constructor argument. The region segment determines the OFREP and metrics endpoints; the full key is sent as the `Authorization` header.
-
----
-
 ## Usage
-
-### Basic setup
 
 ```ts
 import { OpenFeature } from '@openfeature/web-sdk';
 import { DynatraceProvider } from '@dynatrace/openfeature-provider-web';
 
-const provider = new DynatraceProvider('dt01.web_us_…');
-
-// Set evaluation context before registering the provider so the initial
+// Set the evaluation context before registering the provider so the initial
 // bulk evaluation includes targeting information.
-await OpenFeature.setContext({ targetingKey: 'user-abc' });
-
-// Wait until the provider has fetched all flags before evaluating.
-await OpenFeature.setProviderAndWait(provider);
+await OpenFeature.setContext({ targetingKey: 'user-123' });
+await OpenFeature.setProviderAndWait(new DynatraceProvider('dt01.web_us_…'));
 
 const client = OpenFeature.getClient();
 const showBanner = client.getBooleanValue('show-banner', false);
 ```
 
-### Context changes
+Calling `OpenFeature.setContext()` after registration re-evaluates all flags for the new context and
+surfaces changed flag keys via the `PROVIDER_CONFIGURATION_CHANGED` event.
 
-Calling `OpenFeature.setContext()` after provider registration automatically
-triggers a new bulk evaluation for the new context. Changed flag keys are
-surfaced via the `PROVIDER_CONFIGURATION_CHANGED` event.
+Once the provider is registered, all flag evaluation goes through the OpenFeature API. See the
+[OpenFeature Web SDK documentation](https://openfeature.dev/docs/reference/technologies/client/web/)
+for evaluation contexts, hooks, events, and the rest of the SDK surface.
 
-```ts
-// Re-evaluates all flags for the new user context.
-await OpenFeature.setContext({ targetingKey: 'user-xyz', plan: 'enterprise' });
-```
+## Configuration
 
-### Periodic polling
-
-Pass a `pollInterval` (in milliseconds) to have the provider re-fetch flags
-on a timer in addition to context-change triggers.
+The provider takes the SDK key as its first argument and optional overrides as the second:
 
 ```ts
-const provider = new DynatraceProvider('dt01.web_us_…', {
-  pollInterval: 60_000, // refresh every 60 seconds
+const provider = new DynatraceProvider(sdkKey, {
+  pollInterval: 60_000,
 });
 ```
 
-### Listening for flag changes
+| Option          | Type     | Default              | Description                                                                                                       |
+| --------------- | -------- | -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `pollInterval`  | `number` | `-1` (disabled)      | How often, in milliseconds, the provider refetches flags in addition to context-change refetches. Minimum 1000ms. |
+| `apiOrigin`     | `string` | derived from SDK key | Override the flag evaluation API origin.                                                                          |
+| `metricsOrigin` | `string` | derived from SDK key | Override the evaluation metrics ingest origin.                                                                    |
 
-```ts
-import { OpenFeature, ProviderEvents } from '@openfeature/web-sdk';
-
-OpenFeature.addHandler(ProviderEvents.ConfigurationChanged, (event) => {
-  console.log('Flags changed:', event?.flagsChanged);
-  // Re-render components that depend on changed flags.
-});
-```
+A runnable example lives in [`examples/react-app`](examples/react-app).
 
 ## License
 
-[Apache-2.0](../../LICENSE)
+Apache 2.0 — see [LICENSE](../../LICENSE).
