@@ -49,11 +49,11 @@ const provider = new DynatraceProvider(sdkKey, {
 });
 ```
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `pollInterval` | `number` | `-1` (disabled) | How often, in milliseconds, the provider refetches flags in addition to context-change refetches. Minimum 1000ms. |
-| `apiOrigin` | `string` | derived from SDK key | Override the flag evaluation API origin. |
-| `metricsOrigin` | `string` | derived from SDK key | Override the evaluation metrics ingest origin. |
+| Option          | Type     | Default              | Description                                                                                                       |
+| --------------- | -------- | -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `pollInterval`  | `number` | `-1` (disabled)      | How often, in milliseconds, the provider refetches flags in addition to context-change refetches. Minimum 1000ms. |
+| `apiOrigin`     | `string` | derived from SDK key | Override the flag evaluation API origin.                                                                          |
+| `metricsOrigin` | `string` | derived from SDK key | Override the evaluation metrics ingest origin.                                                                    |
 
 A runnable example lives in [`examples/react-app`](examples/react-app).
 

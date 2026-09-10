@@ -6,9 +6,9 @@ Monorepo for the official [Dynatrace](https://dynatrace.com) [OpenFeature](https
 
 ## Packages
 
-| Package | Description |
-| --- | --- |
-| [`@dynatrace/openfeature-provider-web`](./packages/web) | Provider for web browsers |
+| Package                                                   | Description                        |
+| --------------------------------------------------------- | ---------------------------------- |
+| [`@dynatrace/openfeature-provider-web`](./packages/web)   | Provider for web browsers          |
 | [`@dynatrace/openfeature-provider-node`](./packages/node) | Provider for Node.js (server-side) |
 
 See each package's README for installation, usage, and configuration.
