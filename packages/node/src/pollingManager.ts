@@ -1,4 +1,4 @@
-import { isNotModified, isRateLimited, isSuccess, type FetchResult } from './fetchResult';
+import { isNotModified, isRateLimited, isSkipped, isSuccess, type FetchResult } from './fetchResult';
 
 export const DEFAULT_POLL_INTERVAL_MS = 10_000;
 
@@ -59,6 +59,13 @@ export class PollingManager {
       const result = await this._callbacks.fetchFlags(signal);
 
       if (this._stopped || signal.aborted) {
+        return;
+      }
+
+      // No request was made (another fetch was already in flight), so this tick learned
+      // nothing. Emitting success here would reset the staleness grace timer for a poll
+      // that never reached the CDN.
+      if (isSkipped(result)) {
         return;
       }
 

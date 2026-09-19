@@ -67,14 +67,15 @@ export class CdnFetcher {
   /**
    * Fetches the flag configuration from the CDN with retry.
    *
-   * Returns 429 immediately when rate-limited, and 304 when another fetch is in flight.
+   * Returns 429 immediately when rate-limited, and a skipped result when another fetch
+   * is already in flight (no request is made, and the caller must not count it as a poll).
    */
   async fetch(signal?: AbortSignal): Promise<FetchResult> {
     if (this.isRateLimited()) {
-      return { status: 429, body: null, etag: null, lastModified: null };
+      return { status: 429, body: null, etag: null, lastModified: null, skipped: false };
     }
     if (this._fetchInProgress) {
-      return { status: 304, body: null, etag: null, lastModified: null };
+      return { status: 0, body: null, etag: null, lastModified: null, skipped: true };
     }
 
     this._fetchInProgress = true;
@@ -110,13 +111,14 @@ export class CdnFetcher {
         body: null,
         etag: this._state.etag,
         lastModified: this._state.lastModified,
+        skipped: false,
       };
     }
 
     if (status === 429) {
       const retryAfterMs = parseRetryAfterMs(response.headers.get(HEADER_RETRY_AFTER), this._now());
       this._rateLimitedUntil = this._now() + retryAfterMs;
-      return { status: 429, body: null, etag: null, lastModified: null };
+      return { status: 429, body: null, etag: null, lastModified: null, skipped: false };
     }
 
     const newEtag = response.headers.get(HEADER_ETAG);
@@ -156,9 +158,10 @@ export class CdnFetcher {
         body,
         etag: newEtag,
         lastModified: newLastModified,
+        skipped: false,
       };
     }
 
-    return { status, body: null, etag: newEtag, lastModified: newLastModified };
+    return { status, body: null, etag: newEtag, lastModified: newLastModified, skipped: false };
   }
 }

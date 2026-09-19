@@ -4,7 +4,9 @@ import type { FetchResult } from './fetchResult';
 
 function makeCallbacks(overrides: Partial<PollingCallbacks> = {}): PollingCallbacks {
   return {
-    fetchFlags: vi.fn(async (): Promise<FetchResult> => ({ status: 304, body: null, etag: null, lastModified: null })),
+    fetchFlags: vi.fn(
+      async (): Promise<FetchResult> => ({ status: 304, body: null, etag: null, lastModified: null, skipped: false }),
+    ),
     storeFlags: vi.fn(async () => [] as string[]),
     emitChange: vi.fn(),
     emitSuccess: vi.fn(),
@@ -20,6 +22,21 @@ describe('PollingManager', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('does not emit success when the fetch was skipped', async () => {
+    const callbacks = makeCallbacks({
+      fetchFlags: vi.fn(async () => ({ status: 0, body: null, etag: null, lastModified: null, skipped: true })),
+    });
+    const manager = new PollingManager(callbacks, 10);
+
+    manager.start();
+    await vi.advanceTimersByTimeAsync(35);
+    manager.stop();
+
+    // A skipped poll never reached the CDN, so it must not look like a healthy cycle.
+    expect(callbacks.emitSuccess).not.toHaveBeenCalled();
+    expect(callbacks.emitFailure).not.toHaveBeenCalled();
   });
 
   it('emits success on 304', async () => {
@@ -77,7 +94,7 @@ describe('PollingManager', () => {
 
   it('ignores 429 without emitting failure', async () => {
     const callbacks = makeCallbacks({
-      fetchFlags: vi.fn(async () => ({ status: 429, body: null, etag: null, lastModified: null })),
+      fetchFlags: vi.fn(async () => ({ status: 429, body: null, etag: null, lastModified: null, skipped: false })),
     });
     const manager = new PollingManager(callbacks, 10);
 
@@ -91,7 +108,7 @@ describe('PollingManager', () => {
 
   it('emits failure on non-success responses', async () => {
     const callbacks = makeCallbacks({
-      fetchFlags: vi.fn(async () => ({ status: 503, body: null, etag: null, lastModified: null })),
+      fetchFlags: vi.fn(async () => ({ status: 503, body: null, etag: null, lastModified: null, skipped: false })),
     });
     const manager = new PollingManager(callbacks, 10);
 
@@ -124,7 +141,7 @@ describe('PollingManager', () => {
         if (signal.aborted) {
           throw new DOMException('The operation was aborted', 'AbortError');
         }
-        return { status: 304, body: null, etag: null, lastModified: null };
+        return { status: 304, body: null, etag: null, lastModified: null, skipped: false };
       }),
     });
 
@@ -143,7 +160,7 @@ describe('PollingManager', () => {
     const callbacks = makeCallbacks({
       fetchFlags: vi.fn(async (signal) => {
         expect(signal).toBeInstanceOf(AbortSignal);
-        return { status: 304, body: null, etag: null, lastModified: null };
+        return { status: 304, body: null, etag: null, lastModified: null, skipped: false };
       }),
     });
     const manager = new PollingManager(callbacks, 10);

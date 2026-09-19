@@ -192,7 +192,7 @@ describe('CdnFetcher', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('returns 304 when a concurrent fetch is already in progress', async () => {
+  it('returns a skipped result when a concurrent fetch is already in progress', async () => {
     let resolveFetch: (value: Response) => void = () => {};
     fetchMock.mockImplementationOnce(
       () =>
@@ -204,7 +204,10 @@ describe('CdnFetcher', () => {
     const client = fetcher();
     const inFlight = client.fetch();
     const concurrent = await client.fetch();
-    expect(concurrent.status).toBe(304);
+    expect(concurrent.skipped).toBe(true);
+    // Must not masquerade as a 304: the caller has to be able to tell "we never asked"
+    // apart from "the CDN confirmed our config is current".
+    expect(concurrent.status).not.toBe(304);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     resolveFetch(makeResponse(200, { body: MINIMAL_FLAGS_BODY, headers: { [HEADER_ETAG]: TEST_ETAG } }));
