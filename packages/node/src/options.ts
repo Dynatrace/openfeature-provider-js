@@ -1,5 +1,6 @@
 import { metricsUrlFromOrigin, validateOrigin } from '../../shared/src/origin.js';
 import { buildCdnUrl, buildMetricsUrl, parseSdkKey, publicKey } from '../../shared/src/sdkKey.js';
+import type { Logger } from '@openfeature/server-sdk';
 import type { FlagdCore } from '@openfeature/flagd-core';
 import type { FetchFn } from './cdnFetcher.js';
 import type { ServerMetricsFlusher } from './metrics/ServerMetricsFlusher.js';
@@ -31,6 +32,11 @@ export interface DynatraceProviderOptions {
   configOrigin?: string;
   /** Override the metrics origin (scheme, host, and port; no path, query, or fragment). */
   metricsOrigin?: string;
+  /**
+   * Receives provider diagnostics. Defaults to the OpenFeature console logger, which emits
+   * `error` and `warn` and drops `info` and `debug`; supply one to capture those levels.
+   */
+  logger?: Logger;
 }
 
 export interface ResolvedProviderOptions {

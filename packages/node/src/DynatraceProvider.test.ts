@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { LOG_PREFIX } from '../../shared/src/logger';
 import { ProviderEvents } from '@openfeature/server-sdk';
 import { DynatraceProvider } from './DynatraceProvider';
 import { TEST_FLAG_JSON, VALID_SERVER_KEY } from './testFixtures';
@@ -387,6 +388,18 @@ describe('DynatraceProvider', () => {
   it('exposes a metrics hook', () => {
     const provider = new DynatraceProvider(VALID_SERVER_KEY);
     expect(provider.hooks).toHaveLength(1);
+  });
+
+  it('routes provider diagnostics to a supplied logger', async () => {
+    const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
+    const fetch = createMockFetch({});
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, { logger }, { fetch, metricsFetch: fetch });
+
+    await provider.initialize();
+    await provider.onClose();
+
+    expect(logger.info).toHaveBeenCalledWith(LOG_PREFIX, expect.stringContaining('initialized'));
+    expect(logger.info).toHaveBeenCalledWith(LOG_PREFIX, 'shutting down');
   });
 
   it('flushes evaluation metrics on close', async () => {

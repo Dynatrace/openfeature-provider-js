@@ -1,6 +1,7 @@
 import { FlagdCore } from '@openfeature/flagd-core';
 import type { EvaluationContext, JsonValue, Logger, Provider, ResolutionDetails, Hook } from '@openfeature/server-sdk';
 import { ErrorCode, OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk';
+import { resolveLogger } from '../../shared/src/logger.js';
 import { MetricsAggregator } from '../../shared/src/metrics/aggregator.js';
 import { MetricsHook } from '../../shared/src/metrics/MetricsHook.js';
 import { CdnFetcher } from './cdnFetcher.js';
@@ -29,6 +30,7 @@ export class DynatraceProvider implements Provider {
   public readonly hooks: Hook[];
 
   private readonly _options: ReturnType<typeof resolveProviderOptions>;
+  private readonly _logger: Logger;
   private readonly _flagdCore: FlagdCore;
   private readonly _fetcher: CdnFetcher;
   private readonly _metricsAggregator: MetricsAggregator;
@@ -48,9 +50,16 @@ export class DynatraceProvider implements Provider {
   constructor(sdkKey: string, options: DynatraceProviderOptions | undefined, internals: ProviderInternals);
   constructor(sdkKey: string, options?: DynatraceProviderOptions, internals?: ProviderInternals) {
     this._options = resolveProviderOptions(sdkKey, options);
+    this._logger = resolveLogger(options?.logger);
 
     this._flagdCore = internals?.flagdCore ?? new FlagdCore();
-    this._fetcher = new CdnFetcher(this._options.cdnUrl, new RetryStrategy(), internals?.fetch);
+    this._fetcher = new CdnFetcher(
+      this._options.cdnUrl,
+      new RetryStrategy(),
+      internals?.fetch,
+      undefined,
+      this._logger,
+    );
     this._metricsAggregator = new MetricsAggregator({
       gateOnVersion: true,
       maxDistinctFlags: DEFAULT_METRICS_HARD_CAP_DISTINCT_FLAGS,
@@ -65,6 +74,7 @@ export class DynatraceProvider implements Provider {
         sdkVersion: PACKAGE_VERSION,
         providerName: this.metadata.name,
         fetch: internals?.metricsFetch ?? internals?.fetch,
+        logger: this._logger,
       });
     this.hooks = [
       new MetricsHook(this._metricsAggregator, {
@@ -128,6 +138,7 @@ export class DynatraceProvider implements Provider {
     this._updateMetricsVersionFromFlagSet();
 
     this._state = 'READY';
+    this._logger.info(`initialized; polling ${this._options.cdnUrl} every ${this._pollIntervalMs}ms`);
     return true;
   }
 
@@ -143,6 +154,7 @@ export class DynatraceProvider implements Provider {
         emitFailure: (reason) => this._onFetchFailure(reason),
       },
       this._pollIntervalMs,
+      this._logger,
     );
     this._pollingManager.start();
     this._metricsFlusher.start();
@@ -168,6 +180,7 @@ export class DynatraceProvider implements Provider {
   private async _close(): Promise<void> {
     this._shutdown = true;
 
+    this._logger.info('shutting down');
     this._pollingManager?.stop();
     this._pollingManager = undefined;
     this._cancelGraceTimer();
@@ -315,6 +328,7 @@ export class DynatraceProvider implements Provider {
       return;
     }
     this._state = 'ERROR';
+    this._logger.error(`grace period of ${this._gracePeriodMs}ms expired without a successful poll; CDN unreachable`);
     this.events.emit(ProviderEvents.Error, { message: 'grace period expired; CDN unreachable' });
   }
 }
