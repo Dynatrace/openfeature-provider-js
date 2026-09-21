@@ -39,6 +39,7 @@ export class DynatraceProvider implements Provider {
   private _state: ProviderState = 'NOT_READY';
   private _shutdown = false;
   private _generation = 0;
+  private _closing: Promise<void> | undefined;
   private _graceTimer: ReturnType<typeof setTimeout> | undefined;
   private _pollingManager: PollingManager | undefined;
 
@@ -78,6 +79,7 @@ export class DynatraceProvider implements Provider {
     // A re-initialize can overtake one still awaiting the CDN; generation ensures only the newest touches shared state.
     const generation = ++this._generation;
     this._shutdown = false;
+    this._closing = undefined;
     // A fresh lifecycle re-fetches in full; the previous validators would earn a 304 init cannot accept.
     this._fetcher.reset();
 
@@ -151,10 +153,19 @@ export class DynatraceProvider implements Provider {
     return this._shutdown || generation !== this._generation;
   }
 
-  async onClose(): Promise<void> {
-    if (this._shutdown) {
-      return;
-    }
+  /**
+   * Closes the provider. Concurrent callers await the same shutdown.
+   *
+   * The SDK can call this more than once on one instance: provider replacement does not
+   * await it, and close() fans out over domain-scoped providers in parallel. Returning the
+   * in-flight promise keeps every caller waiting for the final metrics delivery.
+   */
+  onClose(): Promise<void> {
+    this._closing ??= this._close();
+    return this._closing;
+  }
+
+  private async _close(): Promise<void> {
     this._shutdown = true;
 
     this._pollingManager?.stop();
@@ -256,9 +267,10 @@ export class DynatraceProvider implements Provider {
 
   private _updateMetricsVersionFromFlagSet(): void {
     const version = this._flagdCore.getFlagSetMetadata().version;
-    if (typeof version === 'string') {
-      this._metricsAggregator.setVersion(version);
-    }
+    // The aggregator normalizes strings and numbers; anything else clears the gate rather
+    // than attributing new evaluations to the version the previous config carried.
+    const usable = typeof version === 'string' || typeof version === 'number';
+    this._metricsAggregator.setVersion(usable ? version : undefined);
   }
 
   private _onFetchSuccess(): void {
