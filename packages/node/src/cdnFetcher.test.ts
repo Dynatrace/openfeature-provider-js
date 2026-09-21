@@ -192,26 +192,28 @@ describe('CdnFetcher', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('returns a skipped result when a concurrent fetch is already in progress', async () => {
-    let resolveFetch: (value: Response) => void = () => {};
-    fetchMock.mockImplementationOnce(
+  it('still issues a request when another fetch is already in flight', async () => {
+    const pending: ((value: Response) => void)[] = [];
+    fetchMock.mockImplementation(
       () =>
         new Promise<Response>((resolve) => {
-          resolveFetch = resolve;
+          pending.push(resolve);
         }),
     );
 
     const client = fetcher();
     const inFlight = client.fetch();
-    const concurrent = await client.fetch();
-    expect(concurrent.skipped).toBe(true);
-    // Must not masquerade as a 304: the caller has to be able to tell "we never asked"
-    // apart from "the CDN confirmed our config is current".
-    expect(concurrent.status).not.toBe(304);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const concurrent = client.fetch();
 
-    resolveFetch(makeResponse(200, { body: MINIMAL_FLAGS_BODY, headers: { [HEADER_ETAG]: TEST_ETAG } }));
+    // The poll cadence is anchored to request initiation, so an overlapping call must
+    // reach the CDN rather than being suppressed. Callers cancel the superseded fetch.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    for (const resolve of pending) {
+      resolve(makeResponse(200, { body: MINIMAL_FLAGS_BODY, headers: { [HEADER_ETAG]: TEST_ETAG } }));
+    }
     await inFlight;
+    await concurrent;
   });
 
   it('treats older Last-Modified as 304 (stale-node defense)', async () => {

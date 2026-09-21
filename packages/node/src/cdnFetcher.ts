@@ -51,7 +51,6 @@ export function parseHttpDate(value: string): Date | null {
 export class CdnFetcher {
   private _state: CacheState = { ...EMPTY_CACHE };
   private _rateLimitedUntil = 0;
-  private _fetchInProgress = false;
 
   constructor(
     private readonly _url: string,
@@ -67,23 +66,18 @@ export class CdnFetcher {
   /**
    * Fetches the flag configuration from the CDN with retry.
    *
-   * Returns 429 immediately when rate-limited, and a skipped result when another fetch
-   * is already in flight (no request is made, and the caller must not count it as a poll).
+   * Returns 429 immediately when rate-limited.
+   *
+   * Deliberately has no in-flight guard. Per fm-knowledge-base providers.md 2.1, the poll
+   * cadence is anchored to when each request is initiated, so every tick must issue a
+   * request. PollingManager aborts the previous poll before starting the next, which bounds
+   * this to one live fetch and discards the superseded result without emitting an event.
    */
   async fetch(signal?: AbortSignal): Promise<FetchResult> {
     if (this.isRateLimited()) {
-      return { status: 429, body: null, etag: null, lastModified: null, skipped: false };
+      return { status: 429, body: null, etag: null, lastModified: null };
     }
-    if (this._fetchInProgress) {
-      return { status: 0, body: null, etag: null, lastModified: null, skipped: true };
-    }
-
-    this._fetchInProgress = true;
-    try {
-      return await this._retryStrategy.execute(() => this._doFetch(signal), signal);
-    } finally {
-      this._fetchInProgress = false;
-    }
+    return await this._retryStrategy.execute(() => this._doFetch(signal), signal);
   }
 
   private async _doFetch(signal?: AbortSignal): Promise<FetchResult> {
@@ -111,14 +105,13 @@ export class CdnFetcher {
         body: null,
         etag: this._state.etag,
         lastModified: this._state.lastModified,
-        skipped: false,
       };
     }
 
     if (status === 429) {
       const retryAfterMs = parseRetryAfterMs(response.headers.get(HEADER_RETRY_AFTER), this._now());
       this._rateLimitedUntil = this._now() + retryAfterMs;
-      return { status: 429, body: null, etag: null, lastModified: null, skipped: false };
+      return { status: 429, body: null, etag: null, lastModified: null };
     }
 
     const newEtag = response.headers.get(HEADER_ETAG);
@@ -132,7 +125,7 @@ export class CdnFetcher {
         newLastModifiedAt.getTime() <= this._state.lastModifiedAt.getTime()
       ) {
         // Stale-node defense: the CDN served a body older than what we already hold.
-        // This is a real answer from the CDN, not a skipped request, so it counts as a
+        // This is a real answer from the CDN, so it counts as a
         // successful poll exactly like a 304 (see fm-provider-test-harness cdn.feature,
         // "A 200 whose Last-Modified is not newer is ignored").
         return {
@@ -140,7 +133,6 @@ export class CdnFetcher {
           body: null,
           etag: this._state.etag,
           lastModified: this._state.lastModified,
-          skipped: false,
         };
       }
 
@@ -163,10 +155,9 @@ export class CdnFetcher {
         body,
         etag: newEtag,
         lastModified: newLastModified,
-        skipped: false,
       };
     }
 
-    return { status, body: null, etag: newEtag, lastModified: newLastModified, skipped: false };
+    return { status, body: null, etag: newEtag, lastModified: newLastModified };
   }
 }

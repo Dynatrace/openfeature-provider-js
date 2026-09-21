@@ -4,9 +4,7 @@ import type { FetchResult } from './fetchResult';
 
 function makeCallbacks(overrides: Partial<PollingCallbacks> = {}): PollingCallbacks {
   return {
-    fetchFlags: vi.fn(
-      async (): Promise<FetchResult> => ({ status: 304, body: null, etag: null, lastModified: null, skipped: false }),
-    ),
+    fetchFlags: vi.fn(async (): Promise<FetchResult> => ({ status: 304, body: null, etag: null, lastModified: null })),
     storeFlags: vi.fn(async () => [] as string[]),
     emitChange: vi.fn(),
     emitSuccess: vi.fn(),
@@ -24,17 +22,25 @@ describe('PollingManager', () => {
     vi.useRealTimers();
   });
 
-  it('does not emit success when the fetch was skipped', async () => {
-    const callbacks = makeCallbacks({
-      fetchFlags: vi.fn(async () => ({ status: 0, body: null, etag: null, lastModified: null, skipped: true })),
-    });
+  it('starts a fresh fetch every tick and emits nothing for superseded polls', async () => {
+    const fetchFlags = vi.fn(
+      (signal: AbortSignal) =>
+        new Promise<FetchResult>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        }),
+    );
+    const callbacks = makeCallbacks({ fetchFlags });
     const manager = new PollingManager(callbacks, 10);
 
     manager.start();
     await vi.advanceTimersByTimeAsync(35);
     manager.stop();
 
-    // A skipped poll never reached the CDN, so it must not look like a healthy cycle.
+    // Cadence is anchored to request initiation, so every elapsed interval starts a fetch
+    // even though the previous one never completed.
+    expect(fetchFlags).toHaveBeenCalledTimes(3);
+    // A superseded poll carries no information, so it must emit neither success (which
+    // would reset the staleness grace timer) nor failure.
     expect(callbacks.emitSuccess).not.toHaveBeenCalled();
     expect(callbacks.emitFailure).not.toHaveBeenCalled();
   });
@@ -94,7 +100,7 @@ describe('PollingManager', () => {
 
   it('ignores 429 without emitting failure', async () => {
     const callbacks = makeCallbacks({
-      fetchFlags: vi.fn(async () => ({ status: 429, body: null, etag: null, lastModified: null, skipped: false })),
+      fetchFlags: vi.fn(async () => ({ status: 429, body: null, etag: null, lastModified: null })),
     });
     const manager = new PollingManager(callbacks, 10);
 
@@ -108,7 +114,7 @@ describe('PollingManager', () => {
 
   it('emits failure on non-success responses', async () => {
     const callbacks = makeCallbacks({
-      fetchFlags: vi.fn(async () => ({ status: 503, body: null, etag: null, lastModified: null, skipped: false })),
+      fetchFlags: vi.fn(async () => ({ status: 503, body: null, etag: null, lastModified: null })),
     });
     const manager = new PollingManager(callbacks, 10);
 
@@ -141,7 +147,7 @@ describe('PollingManager', () => {
         if (signal.aborted) {
           throw new DOMException('The operation was aborted', 'AbortError');
         }
-        return { status: 304, body: null, etag: null, lastModified: null, skipped: false };
+        return { status: 304, body: null, etag: null, lastModified: null };
       }),
     });
 
@@ -160,7 +166,7 @@ describe('PollingManager', () => {
     const callbacks = makeCallbacks({
       fetchFlags: vi.fn(async (signal) => {
         expect(signal).toBeInstanceOf(AbortSignal);
-        return { status: 304, body: null, etag: null, lastModified: null, skipped: false };
+        return { status: 304, body: null, etag: null, lastModified: null };
       }),
     });
     const manager = new PollingManager(callbacks, 10);
