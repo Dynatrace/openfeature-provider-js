@@ -50,6 +50,7 @@ export function parseHttpDate(value: string): Date | null {
  */
 export class CdnFetcher {
   private _state: CacheState = { ...EMPTY_CACHE };
+  private _pendingState: CacheState | null = null;
   private _rateLimitedUntil = 0;
 
   constructor(
@@ -61,6 +62,20 @@ export class CdnFetcher {
 
   isRateLimited(): boolean {
     return this._now() < this._rateLimitedUntil;
+  }
+
+  /**
+   * Promotes the validators staged by the last successful fetch.
+   *
+   * The caller invokes this only once it has accepted the body. Until then the previous
+   * validators stay in force, so a body that fails to parse or store is re-requested in
+   * full on the next poll instead of being answered with a 304 we would treat as success.
+   */
+  commit(): void {
+    if (this._pendingState != null) {
+      this._state = this._pendingState;
+      this._pendingState = null;
+    }
   }
 
   /**
@@ -136,20 +151,13 @@ export class CdnFetcher {
         };
       }
 
-      if (newLastModifiedAt != null) {
-        this._state = {
-          etag: newEtag,
-          lastModified: newLastModified,
-          lastModifiedAt: newLastModifiedAt,
-        };
-      } else {
-        this._state = {
-          ...this._state,
-          etag: newEtag,
-        };
-      }
-
       const body = await response.text();
+
+      this._pendingState =
+        newLastModifiedAt != null
+          ? { etag: newEtag, lastModified: newLastModified, lastModifiedAt: newLastModifiedAt }
+          : { ...this._state, etag: newEtag };
+
       return {
         status,
         body,

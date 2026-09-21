@@ -4,7 +4,10 @@ export const DEFAULT_POLL_INTERVAL_MS = 10_000;
 
 export interface PollingCallbacks {
   fetchFlags: (signal: AbortSignal) => Promise<FetchResult>;
-  storeFlags: (body: string) => string[] | Promise<string[]>;
+  /** Must be synchronous so a superseded poll can never overwrite a newer configuration. */
+  storeFlags: (body: string) => string[];
+  /** Accepts the body that was just stored, promoting the fetcher's staged cache validators. */
+  commitFetch: () => void;
   emitChange: (changedKeys: string[]) => void;
   emitSuccess: () => void;
   emitFailure: (reason: string) => void;
@@ -81,10 +84,8 @@ export class PollingManager {
         return;
       }
 
-      const changedKeys = await this._callbacks.storeFlags(result.body);
-      if (this._stopped || signal.aborted) {
-        return;
-      }
+      const changedKeys = this._callbacks.storeFlags(result.body);
+      this._callbacks.commitFetch();
 
       this._callbacks.emitSuccess();
       if (changedKeys.length > 0) {

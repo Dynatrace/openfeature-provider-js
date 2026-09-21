@@ -5,7 +5,8 @@ import type { FetchResult } from './fetchResult';
 function makeCallbacks(overrides: Partial<PollingCallbacks> = {}): PollingCallbacks {
   return {
     fetchFlags: vi.fn(async (): Promise<FetchResult> => ({ status: 304, body: null, etag: null, lastModified: null })),
-    storeFlags: vi.fn(async () => [] as string[]),
+    storeFlags: vi.fn((): string[] => []),
+    commitFetch: vi.fn(),
     emitChange: vi.fn(),
     emitSuccess: vi.fn(),
     emitFailure: vi.fn(),
@@ -66,7 +67,7 @@ describe('PollingManager', () => {
         etag: '"abc"',
         lastModified: null,
       })),
-      storeFlags: vi.fn(async () => []),
+      storeFlags: vi.fn((): string[] => []),
     });
     const manager = new PollingManager(callbacks, 10);
 
@@ -86,7 +87,7 @@ describe('PollingManager', () => {
         etag: '"abc"',
         lastModified: null,
       })),
-      storeFlags: vi.fn(async () => ['flag-a']),
+      storeFlags: vi.fn((): string[] => ['flag-a']),
     });
     const manager = new PollingManager(callbacks, 10);
 

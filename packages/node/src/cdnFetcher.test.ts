@@ -93,6 +93,7 @@ describe('CdnFetcher', () => {
 
     const client = fetcher();
     await client.fetch();
+    client.commit();
     await client.fetch();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -128,6 +129,7 @@ describe('CdnFetcher', () => {
 
     const client = fetcher();
     await client.fetch();
+    client.commit();
     const result = await client.fetch();
 
     expect(result.status).toBe(304);
@@ -239,10 +241,56 @@ describe('CdnFetcher', () => {
 
     const client = fetcher();
     await client.fetch();
+    client.commit();
     const result = await client.fetch();
 
     expect(result.status).toBe(304);
     expect(result.body).toBeNull();
+  });
+
+  it('keeps the previous validators until the body is committed', async () => {
+    fetchMock.mockImplementation(async () =>
+      makeResponse(200, {
+        body: MINIMAL_FLAGS_BODY,
+        headers: {
+          [HEADER_ETAG]: TEST_ETAG,
+          [HEADER_LAST_MODIFIED]: LAST_MODIFIED_OLD,
+        },
+      }),
+    );
+
+    const client = fetcher();
+    await client.fetch();
+    // The caller failed to store this body, so it never commits.
+    await client.fetch();
+
+    const secondInit = fetchMock.mock.calls[1][1] as RequestInit;
+    const headers = secondInit.headers as Headers;
+    expect(headers.get(HEADER_IF_NONE_MATCH)).toBeNull();
+    expect(headers.get(HEADER_IF_MODIFIED_SINCE)).toBeNull();
+  });
+
+  it('stages no validators when reading the body fails', async () => {
+    const unreadable = (): Response =>
+      ({
+        status: 200,
+        headers: makeHeaders({ [HEADER_ETAG]: TEST_ETAG, [HEADER_LAST_MODIFIED]: LAST_MODIFIED_OLD }),
+        text: async () => {
+          throw new Error('connection reset');
+        },
+      }) as unknown as Response;
+    fetchMock
+      .mockImplementationOnce(async () => unreadable())
+      .mockImplementation(async () => makeResponse(200, { body: MINIMAL_FLAGS_BODY }));
+
+    const client = fetcher(new RetryStrategy({ maxAttempts: 1, sleep: () => {} }));
+    await expect(client.fetch()).rejects.toThrow('connection reset');
+    client.commit();
+    await client.fetch();
+
+    const secondInit = fetchMock.mock.calls[1][1] as RequestInit;
+    const headers = secondInit.headers as Headers;
+    expect(headers.get(HEADER_IF_NONE_MATCH)).toBeNull();
   });
 
   it('accepts 200 responses without Last-Modified', async () => {
