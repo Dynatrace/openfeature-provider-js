@@ -33,6 +33,7 @@ export class DynatraceProvider implements Provider {
 
   private _state: ProviderState = 'NOT_READY';
   private _shutdown = false;
+  private _generation = 0;
   private _graceTimer: ReturnType<typeof setTimeout> | undefined;
   private _pollingManager: PollingManager | undefined;
 
@@ -49,6 +50,10 @@ export class DynatraceProvider implements Provider {
   }
 
   async initialize(_context?: EvaluationContext): Promise<void> {
+    // The SDK re-initializes an instance that was replaced and then set again, so a second
+    // initialize() can start while the first is still awaiting the CDN. Only the newest one
+    // may touch shared state; an older one would leave behind a poller nothing can stop.
+    const generation = ++this._generation;
     this._shutdown = false;
     // A fresh lifecycle re-fetches the configuration in full: the validators from the
     // previous one would otherwise earn a 304 that initialization cannot accept.
@@ -64,17 +69,15 @@ export class DynatraceProvider implements Provider {
       throw new Error('initial CDN response body was empty');
     }
 
+    if (this._isSuperseded(generation)) {
+      return;
+    }
+
     try {
       this._flagdCore.setConfigurations(body);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       throw new Error(`initial CDN config is invalid: ${message}`);
-    }
-
-    if (this._shutdown) {
-      // onClose() ran while the initial load was in flight; leave the provider closed
-      // rather than resurrecting it with a poller nothing can stop.
-      return;
     }
 
     this._state = 'READY';
@@ -91,6 +94,11 @@ export class DynatraceProvider implements Provider {
       this._pollIntervalMs,
     );
     this._pollingManager.start();
+  }
+
+  /** True once onClose() or a newer initialize() has taken over this lifecycle. */
+  private _isSuperseded(generation: number): boolean {
+    return this._shutdown || generation !== this._generation;
   }
 
   async onClose(): Promise<void> {

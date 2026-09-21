@@ -83,6 +83,40 @@ describe('DynatraceProvider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('leaves no poller behind when a second initialize overtakes the first', async () => {
+    // OpenFeature re-initializes an instance that was replaced and then set again, so the
+    // first initialize() can still be awaiting the CDN when the second one starts.
+    let releaseFirst: (value: Response) => void;
+    const first = new Promise<Response>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => first)
+      .mockImplementation(async () => new Response(TEST_FLAG_JSON, { status: 200, headers: { ETag: '"v2"' } }));
+    const provider = new DynatraceProvider(
+      VALID_SERVER_KEY,
+      {},
+      {
+        fetch: fetchMock as unknown as typeof fetch,
+        pollIntervalMs: 10,
+      },
+    );
+
+    const stale = provider.initialize();
+    await provider.onClose();
+    const current = provider.initialize();
+    releaseFirst!(new Response(TEST_FLAG_JSON, { status: 200, headers: { ETag: '"v1"' } }));
+    await Promise.all([stale, current]);
+
+    await provider.onClose();
+    const callsAfterClose = fetchMock.mock.calls.length;
+
+    // A poller started by the superseded initialize() would keep polling past onClose().
+    await vi.advanceTimersByTimeAsync(50);
+    expect(fetchMock.mock.calls.length).toBe(callsAfterClose);
+  });
+
   it('can be initialized again after onClose', async () => {
     // The CDN answers a conditional request with 304, which initialize() cannot accept,
     // so a fresh lifecycle has to drop the previous one's validators.
