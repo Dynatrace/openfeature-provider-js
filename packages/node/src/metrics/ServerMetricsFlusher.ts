@@ -57,11 +57,15 @@ export class ServerMetricsFlusher {
     this._now = options.now ?? (() => Date.now());
   }
 
-  /** Starts periodic flushing. Idempotent. */
+  /**
+   * Starts periodic flushing. Idempotent, and able to revive a flusher that was shut down:
+   * the provider reuses one instance across initialize/onClose/initialize cycles.
+   */
   start(): void {
-    if (this._started || this._shutdown) {
+    if (this._periodicTimer != null) {
       return;
     }
+    this._shutdown = false;
     this._started = true;
     this._periodicTimer = setInterval(() => this._scheduleFlushQuietly(), this._flushIntervalMs);
   }

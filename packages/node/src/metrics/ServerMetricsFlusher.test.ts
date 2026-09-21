@@ -32,6 +32,26 @@ async function triggerAndWait(flusher: ServerMetricsFlusher): Promise<void> {
 }
 
 describe('ServerMetricsFlusher', () => {
+  it('delivers metrics again after a shutdown and a restart', async () => {
+    const fetch = createMetricsFetch([202]);
+    const aggregator = new MetricsAggregator();
+    aggregator.setVersion('1741780800');
+
+    // The provider reuses one flusher across initialize/onClose/initialize.
+    const flusher = new ServerMetricsFlusher({ aggregator, fetch, ...FLUSH_OPTS });
+    flusher.start();
+    await flusher.shutdown();
+    expect(fetch).toHaveBeenCalledTimes(0);
+
+    flusher.start();
+    aggregator.record('header-redesign', 'control', 'targeting_match', '', 1_741_780_820);
+    await flusher.shutdown();
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(JSON.parse(String(init?.body)).evaluations[0].flagKey).toBe('header-redesign');
+  });
+
   it('posts documented JSON payload on shutdown', async () => {
     const fetch = createMetricsFetch([202]);
     const aggregator = new MetricsAggregator();
