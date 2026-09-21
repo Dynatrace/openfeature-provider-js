@@ -172,6 +172,44 @@ describe('ServerMetricsFlusher', () => {
     await flusher.shutdown();
   });
 
+  it('keeps a failed live batch and drops the newest seal when the queue filled during the post', async () => {
+    let callIndex = 0;
+    const flusherRef: { current?: ServerMetricsFlusher } = {};
+    const fetch = vi.fn(async () => {
+      callIndex++;
+      if (callIndex === 1) {
+        // Config rotations land while the live batch is still on the wire.
+        for (let i = 0; i < MAX_SEALED_BATCHES; i++) {
+          const batchAgg = new MetricsAggregator();
+          batchAgg.setVersion(String(i));
+          batchAgg.record(`sealed-${i}`, 'on', 'static', '', 1_741_780_820 + i);
+          flusherRef.current?.enqueueSealedBatch(batchAgg.drain());
+        }
+        return new Response(null, { status: 500 });
+      }
+      return new Response(null, { status: 202 });
+    }) as typeof fetch;
+
+    const aggregator = new MetricsAggregator();
+    aggregator.setVersion('live');
+    aggregator.record('live-flag', 'on', 'static', '', 1_741_780_820);
+    const flusher = new ServerMetricsFlusher({ aggregator, fetch, ...FLUSH_OPTS, softCapDistinctFlags: 1_000 });
+    flusherRef.current = flusher;
+
+    await triggerAndWait(flusher);
+    await triggerAndWait(flusher);
+
+    const bodies = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
+      String((call[1] as RequestInit).body),
+    );
+    // The retry keeps the head of the queue, and the cap holds by dropping the newest seal.
+    expect(bodies[1]).toContain('live-flag');
+    expect(bodies.filter((body) => body.includes('sealed-')).length).toBe(MAX_SEALED_BATCHES - 1);
+    expect(bodies.some((body) => body.includes(`sealed-${MAX_SEALED_BATCHES - 1}`))).toBe(false);
+
+    await flusher.shutdown();
+  });
+
   it('drops incoming sealed batch when queue is full', async () => {
     const fetch = createMetricsFetch(Array(MAX_SEALED_BATCHES + 1).fill(202));
     const aggregator = new MetricsAggregator();

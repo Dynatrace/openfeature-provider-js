@@ -68,6 +68,10 @@ export class ServerMetricsFlusher {
 
   /** Accepts a pre-drained batch for FIFO delivery ahead of the live aggregator. */
   enqueueSealedBatch(batch: DrainedBatch): void {
+    if (this._shutdown) {
+      // Nothing is left to drain the queue, so accepting the batch would only hide the drop.
+      return;
+    }
     if (batch == null || batch.isEmpty()) {
       return;
     }
@@ -183,6 +187,14 @@ export class ServerMetricsFlusher {
       delivered = await this._flushBatch(live);
     } finally {
       if (!delivered) {
+        // Rotations during the failed POST can have filled the queue. The retry keeps its
+        // place at the head, so make room by dropping the newest seal instead: delivery
+        // stays in version order and the batch that already cost a request is not the one
+        // thrown away.
+        if (this._sealedBatchCount >= MAX_SEALED_BATCHES) {
+          this._sealedBatches.pop();
+          this._sealedBatchCount--;
+        }
         this._sealedBatchCount++;
         this._sealedBatches.unshift(live);
       }
