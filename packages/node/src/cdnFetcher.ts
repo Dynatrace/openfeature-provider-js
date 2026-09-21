@@ -131,11 +131,16 @@ export class CdnFetcher {
         this._state.lastModifiedAt != null &&
         newLastModifiedAt.getTime() <= this._state.lastModifiedAt.getTime()
       ) {
+        // Stale-node defense: the CDN served a body older than what we already hold.
+        // This is a real answer from the CDN, not a skipped request, so it counts as a
+        // successful poll exactly like a 304 (see fm-provider-test-harness cdn.feature,
+        // "A 200 whose Last-Modified is not newer is ignored").
         return {
           status: 304,
           body: null,
           etag: this._state.etag,
           lastModified: this._state.lastModified,
+          skipped: false,
         };
       }
 
