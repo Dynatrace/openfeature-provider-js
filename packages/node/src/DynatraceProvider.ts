@@ -1,5 +1,4 @@
 import { FlagdCore } from '@openfeature/flagd-core';
-import type { FetchFn } from './cdnFetcher.js';
 import type { EvaluationContext, JsonValue, Logger, Provider, ResolutionDetails, Hook } from '@openfeature/server-sdk';
 import { ErrorCode, OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk';
 import { CdnFetcher } from './cdnFetcher.js';
@@ -50,6 +49,10 @@ export class DynatraceProvider implements Provider {
   }
 
   async initialize(_context?: EvaluationContext): Promise<void> {
+    this._shutdown = false;
+    // A fresh lifecycle re-fetches the configuration in full: the validators from the
+    // previous one would otherwise earn a 304 that initialization cannot accept.
+    this._fetcher.reset();
     const result = await this._fetcher.fetch();
 
     if (!isSuccess(result)) {
@@ -68,8 +71,13 @@ export class DynatraceProvider implements Provider {
       throw new Error(`initial CDN config is invalid: ${message}`);
     }
 
+    if (this._shutdown) {
+      // onClose() ran while the initial load was in flight; leave the provider closed
+      // rather than resurrecting it with a poller nothing can stop.
+      return;
+    }
+
     this._state = 'READY';
-    this._shutdown = false;
 
     this._pollingManager = new PollingManager(
       {

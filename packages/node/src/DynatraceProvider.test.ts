@@ -64,6 +64,25 @@ describe('DynatraceProvider', () => {
     await provider.onClose();
   });
 
+  it('stays closed when onClose runs during initialize', async () => {
+    let release: (value: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    const fetchMock = vi.fn(() => pending) as unknown as typeof fetch;
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, {}, { fetch: fetchMock, pollIntervalMs: 10 });
+
+    const initializing = provider.initialize();
+    await provider.onClose();
+    release!(new Response(TEST_FLAG_JSON, { status: 200, headers: { ETag: '"v1"' } }));
+    await initializing;
+
+    expect(provider.state).toBe('NOT_READY');
+    // A poller started here would be unreachable, so onClose could never stop it.
+    await vi.advanceTimersByTimeAsync(50);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('throws when initial CDN fetch fails', async () => {
     const provider = new DynatraceProvider(
       VALID_SERVER_KEY,
