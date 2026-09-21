@@ -60,11 +60,13 @@ async function evaluate(context) {
 console.log('\n--- without targeting context ---');
 await evaluate({});
 
-console.log(`\n--- with targetingKey=${process.env.DT_TARGETING_KEY ?? ''} email=${process.env.DT_EMAIL ?? ''} ---`);
-await evaluate({
+const context = {
   targetingKey: process.env.DT_TARGETING_KEY ?? 'user-456',
   email: process.env.DT_EMAIL ?? 'test@external.com',
-});
+};
+
+console.log(`\n--- with targetingKey=${context.targetingKey} email=${context.email} ---`);
+await evaluate(context);
 
 // Flushes any buffered evaluation metrics and stops polling.
 await OpenFeature.close();
