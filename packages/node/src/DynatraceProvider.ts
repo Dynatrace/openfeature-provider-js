@@ -75,6 +75,7 @@ export class DynatraceProvider implements Provider {
       {
         fetchFlags: (signal) => this._fetcher.fetch(signal),
         storeFlags: (json) => this._storeFlags(json),
+        commitFetch: () => this._fetcher.commit(),
         emitChange: (changedKeys) => this._emitConfigurationChanged(changedKeys),
         emitSuccess: () => this._onFetchSuccess(),
         emitFailure: (reason) => this._onFetchFailure(reason),
