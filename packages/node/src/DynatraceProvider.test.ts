@@ -385,6 +385,24 @@ describe('DynatraceProvider', () => {
     expect(String((metricsPost![1] as RequestInit).body)).toContain('my-bool');
   });
 
+  it('never passes the SDK key to the logger', async () => {
+    const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, { logger }, { fetch: createMockFetch({}) });
+
+    await provider.initialize();
+    // Anything the network stack reports can carry the CDN URL, which embeds the key.
+    provider.hooks[0].error?.({ flagKey: 'my-bool' } as any, new Error(`failed for ${VALID_SERVER_KEY}`), {} as any);
+    await provider.onClose();
+
+    const logged = Object.values(logger)
+      .flatMap((level) => level.mock.calls)
+      .flat()
+      .filter((arg): arg is string => typeof arg === 'string');
+    expect(logged.length).toBeGreaterThan(0);
+    expect(logged.some((line) => line.includes(VALID_SERVER_KEY))).toBe(false);
+    expect(logged.some((line) => line.includes('polling'))).toBe(true);
+  });
+
   it('exposes a metrics hook', () => {
     const provider = new DynatraceProvider(VALID_SERVER_KEY);
     expect(provider.hooks).toHaveLength(1);
