@@ -2,29 +2,15 @@ import { DefaultLogger, SafeLogger } from '@openfeature/core';
 import type { Logger } from '@openfeature/core';
 import { publicKey } from './sdkKey';
 
-/**
- * Tag prepended to every log line so provider output is attributable in a shared console.
- *
- * The sibling providers get this from their logging framework's named loggers (slf4j
- * `LoggerFactory.getLogger(Class)`, Go `slog`, Python `logging.getLogger(__name__)`).
- * The JS ecosystem has no ambient logger, so we prefix explicitly.
- */
+/** Tag prepended to every log line; the JS ecosystem has no ambient named logger. */
 export const LOG_PREFIX = '[dynatrace-provider]';
 
 /**
- * Wraps a caller-supplied logger, falling back to the OpenFeature default.
+ * Wraps a caller-supplied logger, falling back to the OpenFeature default, which drops
+ * `info` and `debug` until the host opts in.
  *
- * The default emits `error` and `warn` to the console and drops `info` and `debug`, which
- * matches the siblings: their debug output is off until the host application turns it on.
- * Pass a logger to capture those levels.
- *
- * `SafeLogger` guards against a malformed logger (a missing or non-function level) by
- * falling back rather than throwing from a log call.
- *
- * Pass the SDK key as `sdkKey` to reduce it to its public segment in every message. The
- * private segment is a credential, and it is embedded in the CDN URL that error messages
- * from the network stack can carry, so the scrub runs at the boundary rather than at each
- * call site. The public segment is kept so logs still identify which key is in play.
+ * Passing `sdkKey` reduces it to its public segment in every message: the private segment
+ * is a credential, and it rides along in the CDN URL that network errors can carry.
  */
 export function resolveLogger(logger?: Logger, sdkKey?: string): Logger {
   return withPrefix(new SafeLogger(logger ?? new DefaultLogger()), sdkKey);
