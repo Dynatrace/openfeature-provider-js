@@ -83,6 +83,31 @@ describe('DynatraceProvider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('can be initialized again after onClose', async () => {
+    // The CDN answers a conditional request with 304, which initialize() cannot accept,
+    // so a fresh lifecycle has to drop the previous one's validators.
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const headers = init?.headers as Headers | undefined;
+      if (headers?.get('If-None-Match') != null) {
+        return new Response(null, { status: 304 });
+      }
+      return new Response(TEST_FLAG_JSON, { status: 200, headers: { ETag: '"v1"' } });
+    }) as unknown as typeof fetch;
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, {}, { fetch: fetchMock, pollIntervalMs: 10 });
+
+    await provider.initialize();
+    // Let one poll land so the fetcher commits the validators from that body.
+    await vi.advanceTimersByTimeAsync(15);
+    await provider.onClose();
+    await provider.initialize();
+
+    expect(provider.state).toBe('READY');
+    const result = await provider.resolveBooleanEvaluation('my-bool', false, { targetingKey: 'u1' }, logger);
+    expect(result.value).toBe(true);
+
+    await provider.onClose();
+  });
+
   it('throws when initial CDN fetch fails', async () => {
     const provider = new DynatraceProvider(
       VALID_SERVER_KEY,
