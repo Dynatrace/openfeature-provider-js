@@ -53,9 +53,7 @@ describe('DynatraceProvider', () => {
   });
 
   it('initializes and evaluates flags from CDN config', async () => {
-    const provider = new DynatraceProvider(VALID_SERVER_KEY, {
-      testHooks: { fetch: createMockFetch({}) },
-    });
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, {}, { fetch: createMockFetch({}) });
 
     await provider.initialize();
 
@@ -67,36 +65,42 @@ describe('DynatraceProvider', () => {
   });
 
   it('throws when initial CDN fetch fails', async () => {
-    const provider = new DynatraceProvider(VALID_SERVER_KEY, {
-      testHooks: {
+    const provider = new DynatraceProvider(
+      VALID_SERVER_KEY,
+      {},
+      {
         fetch: createMockFetch({ initialStatus: 404, initialBody: '' }),
       },
-    });
+    );
 
     await expect(provider.initialize()).rejects.toThrow('initial CDN fetch returned HTTP 404');
   });
 
   it('throws when initial CDN body is empty', async () => {
-    const provider = new DynatraceProvider(VALID_SERVER_KEY, {
-      testHooks: {
+    const provider = new DynatraceProvider(
+      VALID_SERVER_KEY,
+      {},
+      {
         fetch: createMockFetch({ initialBody: '' }),
       },
-    });
+    );
 
     await expect(provider.initialize()).rejects.toThrow('initial CDN response body was empty');
   });
 
   it('transitions to STALE when polling fails', async () => {
     const staleEvents: unknown[] = [];
-    const provider = new DynatraceProvider(VALID_SERVER_KEY, {
-      testHooks: {
+    const provider = new DynatraceProvider(
+      VALID_SERVER_KEY,
+      {},
+      {
         fetch: createMockFetch({
           onPoll: () => ({ status: 404 }),
         }),
         pollIntervalMs: 500,
         gracePeriodMs: 5_000,
       },
-    });
+    );
     provider.events.addHandler(ProviderEvents.Stale, (details) => staleEvents.push(details));
 
     await provider.initialize();
@@ -112,15 +116,17 @@ describe('DynatraceProvider', () => {
 
   it('transitions STALE to ERROR after grace period', async () => {
     const errorEvents: unknown[] = [];
-    const provider = new DynatraceProvider(VALID_SERVER_KEY, {
-      testHooks: {
+    const provider = new DynatraceProvider(
+      VALID_SERVER_KEY,
+      {},
+      {
         fetch: createMockFetch({
           onPoll: () => ({ status: 404 }),
         }),
         pollIntervalMs: 500,
         gracePeriodMs: 50,
       },
-    });
+    );
     provider.events.addHandler(ProviderEvents.Error, (details) => errorEvents.push(details));
 
     await provider.initialize();
@@ -134,15 +140,17 @@ describe('DynatraceProvider', () => {
   });
 
   it('still evaluates flags while STALE', async () => {
-    const provider = new DynatraceProvider(VALID_SERVER_KEY, {
-      testHooks: {
+    const provider = new DynatraceProvider(
+      VALID_SERVER_KEY,
+      {},
+      {
         fetch: createMockFetch({
           onPoll: () => ({ status: 404 }),
         }),
         pollIntervalMs: 500,
         gracePeriodMs: 5_000,
       },
-    });
+    );
 
     await provider.initialize();
     await vi.advanceTimersByTimeAsync(500);
@@ -155,9 +163,7 @@ describe('DynatraceProvider', () => {
   });
 
   it('onClose is idempotent', async () => {
-    const provider = new DynatraceProvider(VALID_SERVER_KEY, {
-      testHooks: { fetch: createMockFetch({}) },
-    });
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, {}, { fetch: createMockFetch({}) });
 
     await provider.initialize();
     await provider.onClose();

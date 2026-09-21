@@ -4,7 +4,7 @@ import type { EvaluationContext, JsonValue, Logger, Provider, ResolutionDetails,
 import { ErrorCode, OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk';
 import { CdnFetcher } from './cdnFetcher.js';
 import { isSuccess } from './fetchResult.js';
-import type { DynatraceProviderOptions } from './options.js';
+import type { DynatraceProviderOptions, ProviderInternals } from './options.js';
 import { resolveProviderOptions } from './options.js';
 import { PollingManager, DEFAULT_POLL_INTERVAL_MS } from './pollingManager.js';
 import { RetryStrategy } from './retry.js';
@@ -37,14 +37,16 @@ export class DynatraceProvider implements Provider {
   private _graceTimer: ReturnType<typeof setTimeout> | undefined;
   private _pollingManager: PollingManager | undefined;
 
-  constructor(sdkKey: string, options?: DynatraceProviderOptions) {
+  constructor(sdkKey: string, options?: DynatraceProviderOptions);
+  /** @internal Test seam; stripped from the published declarations. */
+  constructor(sdkKey: string, options: DynatraceProviderOptions | undefined, internals: ProviderInternals);
+  constructor(sdkKey: string, options?: DynatraceProviderOptions, internals?: ProviderInternals) {
     this._options = resolveProviderOptions(sdkKey, options);
-    const testHooks = options?.testHooks;
 
-    this._flagdCore = testHooks?.flagdCore ?? new FlagdCore();
-    this._fetcher = new CdnFetcher(this._options.cdnUrl, new RetryStrategy(), testHooks?.fetch);
-    this._gracePeriodMs = testHooks?.gracePeriodMs ?? GRACE_PERIOD_MS;
-    this._pollIntervalMs = testHooks?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    this._flagdCore = internals?.flagdCore ?? new FlagdCore();
+    this._fetcher = new CdnFetcher(this._options.cdnUrl, new RetryStrategy(), internals?.fetch);
+    this._gracePeriodMs = internals?.gracePeriodMs ?? GRACE_PERIOD_MS;
+    this._pollIntervalMs = internals?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   }
 
   async initialize(_context?: EvaluationContext): Promise<void> {

@@ -7,8 +7,16 @@ export const DEFAULT_METRICS_FLUSH_INTERVAL_MS = 30_000;
 export const DEFAULT_METRICS_SOFT_CAP_DISTINCT_FLAGS = 1_000;
 export const DEFAULT_METRICS_HARD_CAP_DISTINCT_FLAGS = 2_000;
 
-/** @internal Test overrides injected via {@link DynatraceProviderOptions.testHooks}. */
-export interface ProviderTestHooks {
+/**
+ * Collaborator overrides for tests.
+ *
+ * Deliberately NOT part of {@link DynatraceProviderOptions} and not re-exported from the
+ * package entry point, so it never reaches the published type surface. The siblings do the
+ * same: Python uses keyword-only constructor arguments, Go uses unexported option functions.
+ *
+ * @internal
+ */
+export interface ProviderInternals {
   flagdCore?: FlagdCore;
   fetch?: FetchFn;
   gracePeriodMs?: number;
@@ -20,8 +28,6 @@ export interface DynatraceProviderOptions {
   configOrigin?: string;
   /** Override the metrics origin (scheme, host, and port; no path, query, or fragment). */
   metricsOrigin?: string;
-  /** @internal Injected by tests only. */
-  testHooks?: ProviderTestHooks;
 }
 
 export interface ResolvedProviderOptions {
