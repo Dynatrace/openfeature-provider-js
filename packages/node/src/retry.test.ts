@@ -67,7 +67,9 @@ describe('RetryStrategy', () => {
 
     const pending = strategy.execute(async () => {
       attempts++;
-      controller.abort();
+      // Abort once the backoff is already waiting, so the sleep has to settle from its
+      // abort listener rather than from the already-aborted precheck.
+      setTimeout(() => controller.abort(), 0);
       return { status: 503, body: null, etag: null, lastModified: null };
     }, controller.signal);
 
