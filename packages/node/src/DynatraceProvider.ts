@@ -80,6 +80,10 @@ export class DynatraceProvider implements Provider {
       throw new Error(`initial CDN config is invalid: ${message}`);
     }
 
+    // The body is accepted, so its validators become the baseline: the first poll is then
+    // conditional, and the stale-node check has a lastModifiedAt to compare against.
+    this._fetcher.commit();
+
     this._state = 'READY';
 
     this._pollingManager = new PollingManager(

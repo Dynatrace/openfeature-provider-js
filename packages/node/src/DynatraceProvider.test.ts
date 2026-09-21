@@ -117,6 +117,26 @@ describe('DynatraceProvider', () => {
     expect(fetchMock.mock.calls.length).toBe(callsAfterClose);
   });
 
+  it('makes the first poll conditional on the configuration loaded at initialize', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(TEST_FLAG_JSON, {
+          status: 200,
+          headers: { ETag: '"v1"', 'Last-Modified': 'Wed, 01 Jan 2025 00:00:00 GMT' },
+        }),
+    ) as unknown as typeof fetch;
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, {}, { fetch: fetchMock, pollIntervalMs: 10 });
+
+    await provider.initialize();
+    await vi.advanceTimersByTimeAsync(15);
+
+    const pollHeaders = (vi.mocked(fetchMock).mock.calls[1]?.[1]?.headers ?? new Headers()) as Headers;
+    expect(pollHeaders.get('If-None-Match')).toBe('"v1"');
+    expect(pollHeaders.get('If-Modified-Since')).toBe('Wed, 01 Jan 2025 00:00:00 GMT');
+
+    await provider.onClose();
+  });
+
   it('can be initialized again after onClose', async () => {
     // The CDN answers a conditional request with 304, which initialize() cannot accept,
     // so a fresh lifecycle has to drop the previous one's validators.
