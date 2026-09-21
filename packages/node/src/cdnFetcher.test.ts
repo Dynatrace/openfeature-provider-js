@@ -270,6 +270,26 @@ describe('CdnFetcher', () => {
     expect(headers.get(HEADER_IF_MODIFIED_SINCE)).toBeNull();
   });
 
+  it('sends no conditional headers after reset', async () => {
+    fetchMock.mockImplementation(async () =>
+      makeResponse(200, {
+        body: MINIMAL_FLAGS_BODY,
+        headers: { [HEADER_ETAG]: TEST_ETAG, [HEADER_LAST_MODIFIED]: LAST_MODIFIED_OLD },
+      }),
+    );
+
+    const client = fetcher();
+    await client.fetch();
+    client.commit();
+    client.reset();
+    await client.fetch();
+
+    const secondInit = fetchMock.mock.calls[1][1] as RequestInit;
+    const headers = secondInit.headers as Headers;
+    expect(headers.get(HEADER_IF_NONE_MATCH)).toBeNull();
+    expect(headers.get(HEADER_IF_MODIFIED_SINCE)).toBeNull();
+  });
+
   it('stages no validators when reading the body fails', async () => {
     const unreadable = (): Response =>
       ({

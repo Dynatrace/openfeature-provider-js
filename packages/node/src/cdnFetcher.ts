@@ -65,6 +65,19 @@ export class CdnFetcher {
   }
 
   /**
+   * Drops the cached validators so the next fetch performs an unconditional GET.
+   *
+   * A provider that is closed and registered again starts a fresh lifecycle and expects a
+   * full configuration; the previous lifecycle's validators would instead earn a 304 that
+   * carries no body. The rate-limit window deliberately survives, since a Retry-After from
+   * the CDN outlives our lifecycle.
+   */
+  reset(): void {
+    this._state = { ...EMPTY_CACHE };
+    this._pendingState = null;
+  }
+
+  /**
    * Promotes the validators staged by the last successful fetch.
    *
    * The caller invokes this only once it has accepted the body. Until then the previous
