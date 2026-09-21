@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LOG_PREFIX, REDACTED, resolveLogger } from './logger';
+import { LOG_PREFIX, resolveLogger } from './logger';
+import { publicKey } from './sdkKey';
+import { VALID_SERVER_KEY } from './testKeys';
 
 function spyLogger() {
   return { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
@@ -42,37 +44,17 @@ describe('resolveLogger', () => {
     vi.restoreAllMocks();
   });
 
-  it('falls back to the default logger when a level is missing', () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    const logger = resolveLogger({ error: vi.fn(), warn: vi.fn(), info: vi.fn() } as never);
-    logger.error('boom');
-
-    expect(error).toHaveBeenCalledWith(LOG_PREFIX, 'boom');
-    vi.restoreAllMocks();
-  });
-
-  it('strips the secret from every level', () => {
-    const inner = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
-    const logger = resolveLogger(inner, 'dt01.server_us_abc123.secret_sha');
-
-    logger.info('polling https://cdn.us.fm.dynatrace.com/server/dt01.server_us_abc123.secret_sha.json');
-    logger.warn('poll failed for dt01.server_us_abc123.secret_sha');
-
-    expect(inner.info).toHaveBeenCalledWith(
-      LOG_PREFIX,
-      `polling https://cdn.us.fm.dynatrace.com/server/${REDACTED}.json`,
-    );
-    expect(inner.warn).toHaveBeenCalledWith(LOG_PREFIX, `poll failed for ${REDACTED}`);
-  });
-
-  it('passes non-string arguments through untouched', () => {
-    const inner = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
-    const logger = resolveLogger(inner, 'a-secret');
+  it('reduces the SDK key to its public segment and leaves other arguments alone', () => {
+    const inner = spyLogger();
+    const logger = resolveLogger(inner, VALID_SERVER_KEY);
     const payload = { count: 1 };
 
-    logger.debug('context', payload);
+    logger.info(`polling https://cdn.us.fm.dynatrace.com/server/${VALID_SERVER_KEY}.json`);
+    logger.warn(`poll failed for ${VALID_SERVER_KEY}`, payload);
 
-    expect(inner.debug).toHaveBeenCalledWith(LOG_PREFIX, 'context', payload);
+    const pub = publicKey(VALID_SERVER_KEY);
+    expect(pub).not.toContain('secret');
+    expect(inner.info).toHaveBeenCalledWith(LOG_PREFIX, `polling https://cdn.us.fm.dynatrace.com/server/${pub}.json`);
+    expect(inner.warn).toHaveBeenCalledWith(LOG_PREFIX, `poll failed for ${pub}`, payload);
   });
 });

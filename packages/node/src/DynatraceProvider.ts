@@ -138,7 +138,7 @@ export class DynatraceProvider implements Provider {
     this._updateMetricsVersionFromFlagSet();
 
     this._state = 'READY';
-    this._logger.info(`initialized; polling ${this._redactedCdnUrl()} every ${this._pollIntervalMs}ms`);
+    this._logger.info(`initialized; polling ${this._options.cdnUrl} every ${this._pollIntervalMs}ms`);
     return true;
   }
 
@@ -276,11 +276,6 @@ export class DynatraceProvider implements Provider {
     const changedKeys = this._flagdCore.setConfigurations(json);
     this._updateMetricsVersionFromFlagSet();
     return changedKeys;
-  }
-
-  /** The CDN URL embeds the full SDK key, so logs get the public segment instead. */
-  private _redactedCdnUrl(): string {
-    return this._options.cdnUrl.replace(this._options.sdkKey, this._options.publicKey);
   }
 
   private _updateMetricsVersionFromFlagSet(): void {

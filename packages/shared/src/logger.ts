@@ -1,5 +1,6 @@
 import { DefaultLogger, SafeLogger } from '@openfeature/core';
 import type { Logger } from '@openfeature/core';
+import { publicKey } from './sdkKey';
 
 /**
  * Tag prepended to every log line so provider output is attributable in a shared console.
@@ -9,9 +10,6 @@ import type { Logger } from '@openfeature/core';
  * The JS ecosystem has no ambient logger, so we prefix explicitly.
  */
 export const LOG_PREFIX = '[dynatrace-provider]';
-
-/** Stands in for the SDK key wherever one would otherwise reach a log sink. */
-export const REDACTED = '<redacted>';
 
 /**
  * Wraps a caller-supplied logger, falling back to the OpenFeature default.
@@ -23,19 +21,24 @@ export const REDACTED = '<redacted>';
  * `SafeLogger` guards against a malformed logger (a missing or non-function level) by
  * falling back rather than throwing from a log call.
  *
- * Pass the SDK key as `secret` to strip it from every message. The key's private segment is
- * a credential, and it is embedded in the CDN URL that error messages from the network stack
- * can carry, so the scrub runs at the boundary rather than at each call site.
+ * Pass the SDK key as `sdkKey` to reduce it to its public segment in every message. The
+ * private segment is a credential, and it is embedded in the CDN URL that error messages
+ * from the network stack can carry, so the scrub runs at the boundary rather than at each
+ * call site. The public segment is kept so logs still identify which key is in play.
  */
-export function resolveLogger(logger?: Logger, secret?: string): Logger {
-  return withPrefix(new SafeLogger(logger ?? new DefaultLogger()), secret);
+export function resolveLogger(logger?: Logger, sdkKey?: string): Logger {
+  return withPrefix(new SafeLogger(logger ?? new DefaultLogger()), sdkKey);
 }
 
-function withPrefix(logger: Logger, secret?: string): Logger {
+function withPrefix(logger: Logger, sdkKey?: string): Logger {
   const scrub =
-    secret == null || secret === ''
+    sdkKey == null || sdkKey === ''
       ? (args: unknown[]) => args
-      : (args: unknown[]) => args.map((arg) => (typeof arg === 'string' ? arg.split(secret).join(REDACTED) : arg));
+      : (() => {
+          const replacement = publicKey(sdkKey);
+          return (args: unknown[]) =>
+            args.map((arg) => (typeof arg === 'string' ? arg.split(sdkKey).join(replacement) : arg));
+        })();
 
   return {
     error: (...args: unknown[]) => logger.error(LOG_PREFIX, ...scrub(args)),

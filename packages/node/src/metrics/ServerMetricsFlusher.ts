@@ -235,8 +235,13 @@ export class ServerMetricsFlusher {
         return true;
       }
       if (response.status === 400) {
+        // The server rejected the payload itself, so a retry would fail identically.
+        this._logger.warn(
+          `metrics batch rejected as invalid (HTTP 400); dropping ${batch.evaluations.size} flag entries`,
+        );
         return true;
       }
+      this._logger.warn(`metrics flush returned HTTP ${response.status}; retrying on the next flush`);
     } catch (err) {
       // Transport errors and timeouts are retried on the next flush cycle.
       const message = err instanceof Error ? err.message : String(err);
