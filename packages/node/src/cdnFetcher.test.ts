@@ -194,28 +194,18 @@ describe('CdnFetcher', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('still issues a request when another fetch is already in flight', async () => {
-    const pending: ((value: Response) => void)[] = [];
-    fetchMock.mockImplementation(
-      () =>
-        new Promise<Response>((resolve) => {
-          pending.push(resolve);
-        }),
-    );
+  it('does not retry other 4xx responses', async () => {
+    // providers.md 2.4: no 4xx is retried within a fetch. 401/403 in particular stay
+    // non-fatal and recover on the polling timer rather than disabling the provider.
+    for (const status of [401, 403, 404]) {
+      fetchMock.mockClear();
+      fetchMock.mockResolvedValueOnce(makeResponse(status));
 
-    const client = fetcher();
-    const inFlight = client.fetch();
-    const concurrent = client.fetch();
+      const result = await fetcher().fetch();
 
-    // The poll cadence is anchored to request initiation, so an overlapping call must
-    // reach the CDN rather than being suppressed. Callers cancel the superseded fetch.
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-
-    for (const resolve of pending) {
-      resolve(makeResponse(200, { body: MINIMAL_FLAGS_BODY, headers: { [HEADER_ETAG]: TEST_ETAG } }));
+      expect(result.status).toBe(status);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     }
-    await inFlight;
-    await concurrent;
   });
 
   it('treats older Last-Modified as 304 (stale-node defense)', async () => {

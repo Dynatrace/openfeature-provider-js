@@ -5,7 +5,6 @@ export const DEFAULT_POLL_INTERVAL_MS = 10_000;
 
 export interface PollingCallbacks {
   fetchFlags: (signal: AbortSignal) => Promise<FetchResult>;
-  /** Must be synchronous so a superseded poll can never overwrite a newer configuration. */
   storeFlags: (body: string) => string[];
   /** Promotes the fetcher's staged cache validators once the body has been stored. */
   commitFetch: () => void;
@@ -14,10 +13,21 @@ export interface PollingCallbacks {
   emitFailure: (reason: string) => void;
 }
 
-/** Drives periodic CDN polling on a fixed interval with in-flight cancellation. */
+/**
+ * Drives periodic CDN polling on a fixed interval, one fetch at a time.
+ *
+ * Per fm-knowledge-base providers.md 2.1.1, at most one fetch is in flight at any moment. A
+ * tick that finds one running is skipped and has no observable effect: it emits neither
+ * success nor failure, so it cannot reset the staleness grace timer. Reporting it either way
+ * would be a lie, since the tick learned nothing the running fetch was not already learning.
+ *
+ * The interval is still anchored to request initiation (providers.md 2.1); skipping is the
+ * exception that the bounded fetch duration makes rare.
+ */
 export class PollingManager {
   private _timer: ReturnType<typeof setInterval> | undefined;
   private _abortController: AbortController | undefined;
+  private _inFlight = false;
   private _stopped = true;
 
   constructor(
@@ -35,26 +45,23 @@ export class PollingManager {
 
   stop(): void {
     this._stopped = true;
-    this._cancelCurrentPoll();
+    // Shutdown is the one place a fetch is cancelled rather than waited out.
+    this._abortController?.abort();
+    this._abortController = undefined;
     if (this._timer != null) {
       clearInterval(this._timer);
       this._timer = undefined;
     }
   }
 
-  private _cancelCurrentPoll(): void {
-    this._abortController?.abort();
-    this._abortController = undefined;
-  }
-
   private _runPoll(): void {
-    if (this._stopped) {
+    if (this._stopped || this._inFlight) {
       return;
     }
 
-    this._cancelCurrentPoll();
     const abortController = new AbortController();
     this._abortController = abortController;
+    this._inFlight = true;
     void this._poll(abortController.signal);
   }
 
@@ -98,6 +105,8 @@ export class PollingManager {
       }
       const message = err instanceof Error ? err.message : String(err);
       this._callbacks.emitFailure(message);
+    } finally {
+      this._inFlight = false;
     }
   }
 }

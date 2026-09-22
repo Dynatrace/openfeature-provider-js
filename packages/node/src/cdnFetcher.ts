@@ -1,7 +1,7 @@
 import type { FetchResult } from './fetchResult';
 import { RetryStrategy } from './retry';
 
-export const REQUEST_TIMEOUT_MS = 5_000;
+export const REQUEST_TIMEOUT_MS = 4_000;
 export const DEFAULT_RETRY_AFTER_MS = 60_000;
 
 export const HEADER_ETAG = 'ETag';
@@ -96,10 +96,11 @@ export class CdnFetcher {
    *
    * Returns 429 immediately when rate-limited.
    *
-   * Deliberately has no in-flight guard. Per fm-knowledge-base providers.md 2.1, the poll
-   * cadence is anchored to when each request is initiated, so every tick must issue a
-   * request. PollingManager aborts the previous poll before starting the next, which bounds
-   * this to one live fetch and discards the superseded result without emitting an event.
+   * A fetch cannot outlive the shortest poll interval, which fm-knowledge-base
+   * providers.md 2.1 states as an invariant: two 4s attempts plus ~0.12s of backoff is
+   * 8.12s against a 10s interval. Any change to the timeout, the attempt count or the
+   * backoff has to preserve that. PollingManager skips a tick that finds a fetch already
+   * running (providers.md 2.1.1), so at most one is ever in flight.
    */
   async fetch(signal?: AbortSignal): Promise<FetchResult> {
     if (this.isRateLimited()) {

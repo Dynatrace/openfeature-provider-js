@@ -1,7 +1,11 @@
 import { abortError, isAbortError } from './abort';
 import type { FetchResult } from './fetchResult';
 
-export const MAX_ATTEMPTS = 5;
+/**
+ * One retry, not a loop: fm-knowledge-base providers.md 2.4 caps a fetch at two attempts so
+ * it cannot outlive the shortest poll interval. Beyond that, recovery is the next tick's job.
+ */
+export const MAX_ATTEMPTS = 2;
 export const BASE_DELAY_MS = 100;
 export const MULTIPLIER = 2.0;
 export const MAX_JITTER_FACTOR = 0.2;

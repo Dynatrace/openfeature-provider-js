@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { PollingManager, type PollingCallbacks } from './pollingManager';
+import { REQUEST_TIMEOUT_MS } from './cdnFetcher';
+import { DEFAULT_POLL_INTERVAL_MS, PollingManager, type PollingCallbacks } from './pollingManager';
 import type { FetchResult } from './fetchResult';
+import { BASE_DELAY_MS, MAX_ATTEMPTS, MAX_JITTER_FACTOR, MULTIPLIER } from './retry';
 
 function makeCallbacks(overrides: Partial<PollingCallbacks> = {}): PollingCallbacks {
   return {
@@ -14,6 +16,24 @@ function makeCallbacks(overrides: Partial<PollingCallbacks> = {}): PollingCallba
   };
 }
 
+describe('fetch duration bound', () => {
+  // fm-knowledge-base providers.md 2.1 states this as an invariant, not a coincidence: any
+  // change to the timeout, the attempt count or the backoff has to preserve it, because it
+  // is what keeps two polls from ever being in flight at once.
+  it('keeps the worst-case fetch shorter than the shortest poll interval', () => {
+    let backoffMs = 0;
+    let delayMs = BASE_DELAY_MS;
+    for (let retry = 1; retry < MAX_ATTEMPTS; retry++) {
+      backoffMs += delayMs * (1 + MAX_JITTER_FACTOR);
+      delayMs *= MULTIPLIER;
+    }
+
+    const worstCaseMs = MAX_ATTEMPTS * REQUEST_TIMEOUT_MS + backoffMs;
+
+    expect(worstCaseMs).toBeLessThan(DEFAULT_POLL_INTERVAL_MS);
+  });
+});
+
 describe('PollingManager', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -23,7 +43,40 @@ describe('PollingManager', () => {
     vi.useRealTimers();
   });
 
-  it('starts a fresh fetch every tick and emits nothing for superseded polls', async () => {
+  it('skips a tick that finds a fetch already in flight and emits nothing', async () => {
+    let settle: (value: FetchResult) => void;
+    const fetchFlags = vi.fn(
+      () =>
+        new Promise<FetchResult>((resolve) => {
+          settle = resolve;
+        }),
+    );
+    const callbacks = makeCallbacks({ fetchFlags });
+    const manager = new PollingManager(callbacks, 10);
+
+    manager.start();
+    await vi.advanceTimersByTimeAsync(35);
+
+    // Three intervals elapsed, but the first fetch never finished, so the later ticks were
+    // skipped rather than starting a second concurrent fetch.
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+    // A skipped tick learned nothing, so it emits neither success (which would reset the
+    // staleness grace timer) nor failure.
+    expect(callbacks.emitSuccess).not.toHaveBeenCalled();
+    expect(callbacks.emitFailure).not.toHaveBeenCalled();
+
+    settle!({ status: 304, body: null, etag: null, lastModified: null });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(callbacks.emitSuccess).toHaveBeenCalledTimes(1);
+
+    // The slot is free again, so polling resumes on the next tick.
+    await vi.advanceTimersByTimeAsync(10);
+    expect(fetchFlags).toHaveBeenCalledTimes(2);
+
+    manager.stop();
+  });
+
+  it('aborts the in-flight fetch on stop', async () => {
     const fetchFlags = vi.fn(
       (signal: AbortSignal) =>
         new Promise<FetchResult>((_resolve, reject) => {
@@ -34,15 +87,11 @@ describe('PollingManager', () => {
     const manager = new PollingManager(callbacks, 10);
 
     manager.start();
-    await vi.advanceTimersByTimeAsync(35);
+    await vi.advanceTimersByTimeAsync(15);
     manager.stop();
+    await vi.advanceTimersByTimeAsync(0);
 
-    // Cadence is anchored to request initiation, so every elapsed interval starts a fetch
-    // even though the previous one never completed.
-    expect(fetchFlags).toHaveBeenCalledTimes(3);
-    // A superseded poll carries no information, so it must emit neither success (which
-    // would reset the staleness grace timer) nor failure.
-    expect(callbacks.emitSuccess).not.toHaveBeenCalled();
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
     expect(callbacks.emitFailure).not.toHaveBeenCalled();
   });
 
