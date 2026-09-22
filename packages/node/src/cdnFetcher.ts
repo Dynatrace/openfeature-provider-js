@@ -28,7 +28,7 @@ export function parseRetryAfterMs(retryAfter: string | null | undefined, now = D
   }
 
   const seconds = Number(trimmed);
-  if (!Number.isNaN(seconds) && Number.isFinite(seconds)) {
+  if (Number.isFinite(seconds)) {
     return Math.max(seconds, 0) * 1_000;
   }
 
@@ -108,10 +108,13 @@ export class CdnFetcher {
     return await this._retryStrategy.execute(() => this._doFetch(signal), signal);
   }
 
+  /** A 304-shaped result carrying the validators we already hold. */
+  private _notModified(): FetchResult {
+    return { status: 304, body: null, etag: this._state.etag, lastModified: this._state.lastModified };
+  }
+
   private async _doFetch(signal?: AbortSignal): Promise<FetchResult> {
-    if (signal?.aborted) {
-      throw new DOMException('The operation was aborted', 'AbortError');
-    }
+    signal?.throwIfAborted();
 
     const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
     const requestSignal = signal != null ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
@@ -128,12 +131,7 @@ export class CdnFetcher {
     const status = response.status;
 
     if (status === 304) {
-      return {
-        status: 304,
-        body: null,
-        etag: this._state.etag,
-        lastModified: this._state.lastModified,
-      };
+      return this._notModified();
     }
 
     if (status === 429) {
@@ -156,12 +154,7 @@ export class CdnFetcher {
         // This is a real answer from the CDN, so it counts as a
         // successful poll exactly like a 304 (see fm-provider-test-harness cdn.feature,
         // "A 200 whose Last-Modified is not newer is ignored").
-        return {
-          status: 304,
-          body: null,
-          etag: this._state.etag,
-          lastModified: this._state.lastModified,
-        };
+        return this._notModified();
       }
 
       const body = await response.text();

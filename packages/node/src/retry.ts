@@ -1,3 +1,4 @@
+import { abortError, isAbortError } from './abort';
 import type { FetchResult } from './fetchResult';
 
 export const MAX_ATTEMPTS = 5;
@@ -41,9 +42,7 @@ export class RetryStrategy {
     let delayMs = this.baseDelayMs;
 
     for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
-      if (signal?.aborted) {
-        throw abortError();
-      }
+      signal?.throwIfAborted();
 
       try {
         const result = await fetch();
@@ -72,14 +71,6 @@ export class RetryStrategy {
     }
     throw lastError ?? new Error('all retry attempts failed');
   }
-}
-
-function isAbortError(err: unknown): boolean {
-  return err instanceof DOMException && err.name === 'AbortError';
-}
-
-function abortError(): DOMException {
-  return new DOMException('The operation was aborted', 'AbortError');
 }
 
 function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {

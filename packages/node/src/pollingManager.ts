@@ -1,3 +1,4 @@
+import { isAbortError } from './abort';
 import { isNotModified, isRateLimited, isSuccess, type FetchResult } from './fetchResult';
 
 export const DEFAULT_POLL_INTERVAL_MS = 10_000;
@@ -6,7 +7,7 @@ export interface PollingCallbacks {
   fetchFlags: (signal: AbortSignal) => Promise<FetchResult>;
   /** Must be synchronous so a superseded poll can never overwrite a newer configuration. */
   storeFlags: (body: string) => string[];
-  /** Accepts the body that was just stored, promoting the fetcher's staged cache validators. */
+  /** Promotes the fetcher's staged cache validators once the body has been stored. */
   commitFetch: () => void;
   emitChange: (changedKeys: string[]) => void;
   emitSuccess: () => void;
@@ -99,8 +100,4 @@ export class PollingManager {
       this._callbacks.emitFailure(message);
     }
   }
-}
-
-function isAbortError(err: unknown): boolean {
-  return err instanceof DOMException && err.name === 'AbortError';
 }
