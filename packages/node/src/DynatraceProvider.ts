@@ -58,6 +58,32 @@ export class DynatraceProvider implements Provider {
     // A fresh lifecycle re-fetches the configuration in full: the validators from the
     // previous one would otherwise earn a 304 that initialization cannot accept.
     this._fetcher.reset();
+
+    try {
+      if (!(await this._loadInitialConfig(generation))) {
+        return;
+      }
+    } catch (err) {
+      // The timer starts even though initialization failed, per fm-knowledge-base
+      // providers.md 5: the provider holds no config and therefore no SSE URL, so the next
+      // poll tick is the only thing left that can recover it. Without this it would stay
+      // dead for the life of the process.
+      if (!this._isSuperseded(generation)) {
+        this._startPolling();
+      }
+      throw err;
+    }
+
+    this._startPolling();
+  }
+
+  /**
+   * Runs the initial CDN fetch and loads what it returns.
+   *
+   * Returns false when a newer lifecycle took over mid-fetch, in which case this one must
+   * touch nothing further, the poller included.
+   */
+  private async _loadInitialConfig(generation: number): Promise<boolean> {
     const result = await this._fetcher.fetch();
 
     if (!isSuccess(result)) {
@@ -70,7 +96,7 @@ export class DynatraceProvider implements Provider {
     }
 
     if (this._isSuperseded(generation)) {
-      return;
+      return false;
     }
 
     try {
@@ -85,7 +111,10 @@ export class DynatraceProvider implements Provider {
     this._fetcher.commit();
 
     this._state = 'READY';
+    return true;
+  }
 
+  private _startPolling(): void {
     this._pollingManager = new PollingManager(
       {
         fetchFlags: (signal) => this._fetcher.fetch(signal),
@@ -204,7 +233,10 @@ export class DynatraceProvider implements Provider {
 
   private _onFetchSuccess(): void {
     this._cancelGraceTimer();
-    if (this._state === 'STALE' || this._state === 'ERROR') {
+    // NOT_READY is reachable here because a failed initialization still leaves the poller
+    // running (providers.md 5), so the first tick that lands a config is what makes the
+    // provider usable at all.
+    if (this._state !== 'READY') {
       this._state = 'READY';
       this.events.emit(ProviderEvents.Ready, { message: 'recovered' });
     }

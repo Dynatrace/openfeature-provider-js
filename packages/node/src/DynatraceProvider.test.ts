@@ -174,6 +174,35 @@ describe('DynatraceProvider', () => {
     await expect(provider.initialize()).rejects.toThrow('initial CDN fetch returned HTTP 404');
   });
 
+  it('keeps polling after a failed initial fetch and recovers on the first good tick', async () => {
+    // providers.md 5: a failed initialization still starts the poll timer, since with no
+    // config there is no SSE URL and the next tick is the only thing that can recover it.
+    let callCount = 0;
+    const fetchMock = vi.fn(async () => {
+      callCount++;
+      return callCount === 1
+        ? new Response('', { status: 404 })
+        : new Response(TEST_FLAG_JSON, { status: 200, headers: { ETag: '"v1"' } });
+    }) as typeof fetch;
+
+    const readyEvents: unknown[] = [];
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, {}, { fetch: fetchMock, pollIntervalMs: 10 });
+    provider.events.addHandler(ProviderEvents.Ready, (details) => readyEvents.push(details));
+
+    await expect(provider.initialize()).rejects.toThrow('initial CDN fetch returned HTTP 404');
+    expect(provider.state).toBe('NOT_READY');
+
+    await vi.advanceTimersByTimeAsync(15);
+
+    expect(provider.state).toBe('READY');
+    expect(readyEvents).toHaveLength(1);
+
+    const result = await provider.resolveBooleanEvaluation('my-bool', false, { targetingKey: 'u1' }, logger);
+    expect(result.value).toBe(true);
+
+    await provider.onClose();
+  });
+
   it('throws when initial CDN body is empty', async () => {
     const provider = new DynatraceProvider(
       VALID_SERVER_KEY,
