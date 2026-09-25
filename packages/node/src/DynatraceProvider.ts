@@ -126,7 +126,6 @@ export class DynatraceProvider implements Provider {
     this._fetcher.commit();
 
     this._updateMetricsVersionFromFlagSet();
-    this._metricsFlusher.start();
 
     this._state = 'READY';
     return true;
@@ -146,6 +145,7 @@ export class DynatraceProvider implements Provider {
       this._pollIntervalMs,
     );
     this._pollingManager.start();
+    this._metricsFlusher.start();
   }
 
   /** True once onClose() or a newer initialize() has taken over this lifecycle. */

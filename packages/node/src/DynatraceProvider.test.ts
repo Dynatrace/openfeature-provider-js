@@ -417,4 +417,26 @@ describe('DynatraceProvider', () => {
       expect.arrayContaining([expect.objectContaining({ flagKey: 'my-bool', count: 1 })]),
     );
   });
+
+  it('starts the metrics flusher even when the initial fetch fails', async () => {
+    const flusher = {
+      start: vi.fn(),
+      onRecord: vi.fn(),
+      enqueueSealedBatch: vi.fn(),
+      triggerFlush: vi.fn(),
+      shutdown: vi.fn(async () => {}),
+    };
+    const provider = new DynatraceProvider(
+      VALID_SERVER_KEY,
+      {},
+      { fetch: createMockFetch({ initialStatus: 404, initialBody: '' }), metricsFlusher: flusher as any },
+    );
+
+    await expect(provider.initialize()).rejects.toThrow('initial CDN fetch returned HTTP 404');
+
+    // _startPolling runs on the failed-init recovery path, and that is what must start the flusher
+    expect(flusher.start).toHaveBeenCalled();
+
+    await provider.onClose();
+  });
 });
