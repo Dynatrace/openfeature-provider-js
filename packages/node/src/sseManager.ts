@@ -3,13 +3,7 @@ import { EventSource } from 'eventsource';
 import { resolveLogger } from '../../shared/src/logger.js';
 import { parseSseMessage, type SseMessage } from '../../shared/src/sse/sseMessage.js';
 
-/**
- * The slice of `EventSource` the manager uses.
- *
- * Narrower than the real thing on purpose: it keeps the fake in tests honest, and it lets a host
- * substitute another implementation (Node's own global `EventSource`, a proxy-aware client)
- * without this package depending on its exact type.
- */
+/** The slice of `EventSource` the manager uses, so tests and hosts can substitute one. */
 export interface SseEventSource {
   onopen: ((event: unknown) => void) | null;
   onmessage: ((event: { data: string }) => void) | null;
@@ -27,12 +21,7 @@ export interface SseCallbacks {
   onMessage: (message: SseMessage) => void;
 }
 
-/**
- * Strips the query string before logging a stream URL.
- *
- * The URL fm-service advertises carries the Ably channel key as a query parameter, so the raw
- * value is a credential and must never reach a log sink.
- */
+/** Strips the query string before logging: it carries the Ably channel key. */
 export function maskSseUrl(url: string): string {
   const queryStart = url.indexOf('?');
   return queryStart >= 0 ? `${url.slice(0, queryStart)}?<redacted>` : url;
@@ -41,13 +30,8 @@ export function maskSseUrl(url: string): string {
 /**
  * Holds the SSE connection that notifies the provider when its config changes.
  *
- * Reconnection is the underlying `EventSource`'s job (providers.md 2.5): it retries with its own
- * backoff and reports each attempt through `onerror`, so this class deliberately has no retry
- * logic of its own. It reports faults verbatim and leaves the debounce-and-escalate decision to
- * the provider, which is the only place that knows whether a fault is worth going `STALE` over.
- *
- * Messages are parsed here and dropped when unparseable — a malformed payload is not evidence
- * that the stream is unhealthy, so it never surfaces as a disconnect.
+ * Reconnection is the EventSource's job (providers.md 2.5), so faults are reported verbatim and
+ * the provider decides whether one is worth going STALE over.
  */
 export class SseManager {
   private _source: SseEventSource | undefined;
@@ -109,9 +93,8 @@ export class SseManager {
   }
 
   /**
-   * Closes the connection. Idempotent, and permanent for this instance: the handlers are detached
-   * first so a close that races an in-flight event cannot deliver it to a provider that has
-   * already moved on to a new lifecycle or a rotated URL.
+   * Closes the connection, permanently for this instance. Handlers are detached first so a racing
+   * event cannot reach a provider that has moved on to a new lifecycle or a rotated URL.
    */
   stop(): void {
     this._stopped = true;

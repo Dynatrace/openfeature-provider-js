@@ -489,7 +489,7 @@ interface CdnResponse {
   lastModified?: string;
 }
 
-/** A CDN mock driven by an explicit response script, so a test can change the body a poll returns. */
+/** A CDN mock driven by an explicit response script, so a poll can return a different body. */
 function createScriptedFetch(responses: CdnResponse[]): typeof fetch {
   let index = 0;
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -549,7 +549,7 @@ describe('DynatraceProvider SSE', () => {
     expect(urls).toEqual([SSE_URL]);
 
     sources[0].onopen?.({});
-    // The relaxed cadence is 10s in this test, so the 100ms disconnected tick no longer fires.
+    // The relaxed cadence is 10s here, so the 100ms disconnected tick no longer fires.
     await vi.advanceTimersByTimeAsync(500);
     expect(provider.state).toBe('READY');
 

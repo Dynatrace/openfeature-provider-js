@@ -13,19 +13,9 @@ interface EventStream {
 }
 
 /**
- * Resolves the SSE URL advertised by the CDN config body, or `null` when there is none.
- *
- * The config carries an `eventStreams` array alongside the flag definitions; the provider takes
- * the first entry whose `type` is `sse`. Two representations are supported, checked in order:
- *
- * 1. **Direct URL** — a non-blank `url`, returned as-is.
- * 2. **Structured endpoint** — a non-blank `endpoint.requestUri` appended to `endpoint.origin`,
- *    falling back to `fallbackOrigin` (the provider's configured config origin) when the config
- *    omits one. This is the shape fm-service emits today.
- *
- * Unknown attributes are ignored so the server can extend an entry without breaking older SDKs.
- * A body that is not valid JSON yields `null`; the caller is already holding a usable config in
- * that case, or is about to reject the body for the same reason.
+ * Resolves the SSE URL from the config's first `sse` entry in `eventStreams`, or `null`.
+ * A flat `url` wins; otherwise `endpoint.requestUri` is appended to `endpoint.origin`, or to
+ * `fallbackOrigin` when the entry omits one. Unknown attributes are ignored.
  */
 export function sseUrlFrom(configJson: string, fallbackOrigin?: string): string | null {
   let parsed: unknown;
@@ -55,8 +45,7 @@ export function sseUrlFrom(configJson: string, fallbackOrigin?: string): string 
       return isNonBlank(origin) ? origin.trim() + endpoint.requestUri.trim() : null;
     }
 
-    // The first `sse` entry is the one we honour; an unusable one is not a reason to
-    // fall through to a later entry the server did not intend us to prefer.
+    // Only the first `sse` entry counts, even when it is unusable.
     return null;
   }
 

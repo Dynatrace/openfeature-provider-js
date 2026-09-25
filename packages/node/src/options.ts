@@ -37,10 +37,8 @@ export interface DynatraceProviderOptions {
   /** Override the metrics origin (scheme, host, and port; no path, query, or fragment). */
   metricsOrigin?: string;
   /**
-   * Opts out of SSE change notifications, leaving polling as the only update mechanism.
-   *
-   * Polling then stays at its 10s cadence rather than relaxing to the 10m safety-net cadence
-   * SSE allows, so changes are still picked up; they just take longer to arrive.
+   * Opts out of SSE change notifications. Polling then stays at its 10s cadence rather than
+   * relaxing to the 10m safety net, so changes still arrive, just later.
    */
   disableSse?: boolean;
   /**

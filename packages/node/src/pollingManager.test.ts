@@ -243,8 +243,7 @@ describe('PollingManager cadence switching', () => {
     const manager = new PollingManager(callbacks, 1_000);
     manager.start();
 
-    // 900ms into a 1000ms interval, drop to 100ms: the next poll is 100ms away, not 100ms
-    // into a schedule that still remembers the old anchor.
+    // 900ms into a 1000ms interval, drop to 100ms: the next poll is 100ms from now.
     await vi.advanceTimersByTimeAsync(900);
     expect(callbacks.fetchFlags).not.toHaveBeenCalled();
 
@@ -329,8 +328,7 @@ describe('PollingManager SSE re-fetch', () => {
     settle!({ status: 304, body: null, etag: null, lastModified: 'Wed, 01 Jan 2025 00:00:00 GMT' });
     await vi.advanceTimersByTimeAsync(0);
 
-    // The in-flight fetch returned an older config than the one announced, so the deferred
-    // re-fetch still has something to collect.
+    // The fetch returned an older config than announced, so the deferred re-fetch still runs.
     expect(fetchFlags).toHaveBeenCalledTimes(2);
     manager.stop();
   });
@@ -380,8 +378,7 @@ describe('PollingManager SSE re-fetch', () => {
     manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
     manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:10 GMT'));
 
-    // The completed fetch satisfies the older announcement but not the greatest one, so the
-    // single coalesced re-fetch is still issued.
+    // Satisfies the older announcement but not the greatest one, so one re-fetch is issued.
     settle!({ status: 200, body: '{}', etag: null, lastModified: 'Wed, 01 Jan 2025 00:00:20 GMT' });
     await vi.advanceTimersByTimeAsync(0);
 

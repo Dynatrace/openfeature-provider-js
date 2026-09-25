@@ -72,9 +72,8 @@ export class CdnFetcher {
   }
 
   /**
-   * `Last-Modified` of the config currently in force, in epoch milliseconds, or `null` when the
-   * CDN has not sent one. Staged validators do not count: this is what the provider has accepted,
-   * which is what an SSE message's `lastModified` has to beat to be worth acting on.
+   * `Last-Modified` of the config in force, in epoch milliseconds. Staged validators do not count:
+   * this is what an SSE message's `lastModified` has to beat to be worth acting on.
    */
   get committedLastModifiedMs(): number | null {
     return this._state.lastModifiedAt?.getTime() ?? null;

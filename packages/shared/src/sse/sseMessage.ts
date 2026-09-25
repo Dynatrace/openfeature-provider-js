@@ -4,33 +4,19 @@ export const SSE_TYPE_REFETCH_CONFIG = 'refetchConfig';
 /** Client-side signal to re-fetch bulk evaluations from the OFREP endpoint. */
 export const SSE_TYPE_REFETCH_EVALUATION = 'refetchEvaluation';
 
-/**
- * Parsed SSE message envelope per the fm-knowledge-base SSE message format spec.
- *
- * `metadata` is intentionally not exposed: the spec defines it as type-specific extension data
- * that providers must not forward to OFREP clients.
- */
+/** SSE message envelope per the spec. `metadata` is deliberately not exposed. */
 export interface SseMessage {
-  /** Message discriminator. Callers must ignore types they do not recognise. */
+  /** Discriminator; callers ignore types they do not recognise. */
   type: string;
-  /** Quoted ETag of the new upstream resource, when the producer sent one. */
+  /** Quoted ETag of the new upstream resource. */
   etag?: string;
-  /** Unix epoch seconds. Used to drop out-of-order messages. */
+  /** Unix epoch seconds, used to drop out-of-order messages. */
   lastModified?: number;
 }
 
 /**
- * Unwraps the Ably protocol frame around an SSE payload, returning the inner payload.
- *
- * Ably delivers its own message as the SSE `data:` field, with the published payload as a
- * JSON-encoded string under `data`:
- *
- * ```json
- * { "id": "...", "channel": "...", "name": "refetchConfig", "data": "{\"type\":\"refetchConfig\"}" }
- * ```
- *
- * Anything that is not that shape is returned untouched, so a flat payload (what the spec
- * describes, and what the mock server sends) passes straight through.
+ * Unwraps the Ably frame around an SSE payload, which carries the real message as a
+ * JSON-encoded string under `data`. A flat payload passes through untouched.
  */
 export function unwrapSseData(data: unknown): unknown {
   const frame = typeof data === 'string' ? safeJsonParse(data) : data;
@@ -41,12 +27,8 @@ export function unwrapSseData(data: unknown): unknown {
 }
 
 /**
- * Parses an SSE payload into an {@link SseMessage}, accepting either the Ably envelope or the
- * flat spec shape.
- *
- * Returns `null` when the payload is not valid JSON or carries no non-blank `type`. Callers log
- * and drop on `null` rather than tearing down the stream: an unparseable message says nothing
- * about the health of the connection that delivered it.
+ * Parses an SSE payload, accepting the Ably envelope or the flat spec shape. Returns `null` for
+ * invalid JSON or a blank `type`, which callers drop rather than treating as a stream fault.
  */
 export function parseSseMessage(data: unknown): SseMessage | null {
   const inner = unwrapSseData(data);

@@ -22,17 +22,12 @@ export interface PollingCallbacks {
 /**
  * Drives CDN fetching: a periodic poll, plus out-of-band re-fetches requested by SSE.
  *
- * Per fm-knowledge-base providers.md 2.1.1, at most one fetch is in flight at any moment, and the
- * two triggers lose that race differently:
+ * Per providers.md 2.1.1 at most one fetch is in flight, and the two triggers lose that race
+ * differently: a poll tick is skipped, emitting neither success nor failure so it cannot reset
+ * the grace timer, while an SSE re-fetch is deferred and coalesced rather than dropped, since
+ * dropping it would hide a config change for up to a full poll interval.
  *
- * - A **poll tick** that finds a fetch running is skipped and has no observable effect: it emits
- *   neither success nor failure, so it cannot reset the staleness grace timer. Reporting it either
- *   way would be a lie, since the tick learned nothing the running fetch was not already learning.
- * - An **SSE re-fetch** is deferred and coalesced instead of dropped, because dropping it would
- *   hide a config change for up to a full poll interval — ten minutes while SSE is connected.
- *
- * The interval is anchored to request initiation (providers.md 2.1); skipping is the exception
- * that the bounded fetch duration makes rare.
+ * The interval is anchored to request initiation (providers.md 2.1).
  */
 export class PollingManager {
   private _timer: ReturnType<typeof setInterval> | undefined;
@@ -44,11 +39,7 @@ export class PollingManager {
   /** Set while an SSE re-fetch is waiting for the in-flight fetch to finish. */
   private _sseRefetchPending = false;
 
-  /**
-   * The greatest `lastModified` announced by the coalesced SSE messages, in epoch milliseconds.
-   * Notifications can arrive out of order, so the pending re-fetch keeps the greatest value
-   * rather than the most recently received one.
-   */
+  /** Greatest `lastModified` announced by the coalesced messages; they can arrive out of order. */
   private _sseRefetchLastModifiedMs: number | undefined;
 
   private readonly _logger: Logger;
@@ -85,11 +76,8 @@ export class PollingManager {
   }
 
   /**
-   * Switches the cadence and re-anchors the schedule to now.
-   *
-   * Called only when SSE connects or disconnects, so there is no per-tick reschedule churn.
-   * Re-anchoring is what closes the cadence gap on a disconnect: the first fast poll is one short
-   * interval away rather than up to a full ten minutes.
+   * Switches the cadence and re-anchors the schedule to now, so the first poll after a disconnect
+   * is one short interval away rather than up to a full ten minutes.
    */
   setIntervalMs(intervalMs: number): void {
     if (intervalMs === this._intervalMs) {
@@ -103,12 +91,8 @@ export class PollingManager {
   }
 
   /**
-   * Requests an out-of-band fetch in response to an SSE notification.
-   *
-   * Runs immediately when the fetch slot is free, and does not disturb the poll cadence either
-   * way. When a fetch is already running the request is coalesced into a single pending re-fetch
-   * that is issued once the slot frees, and dropped at that point if the completed fetch already
-   * returned a config at least as new as the greatest announced `lastModified`.
+   * Requests an out-of-band fetch for an SSE notification, without disturbing the poll cadence.
+   * Runs immediately when the slot is free, otherwise coalesces into one pending re-fetch.
    *
    * @param lastModifiedMs epoch milliseconds announced by the message, when it carried one
    */
@@ -208,10 +192,9 @@ export class PollingManager {
   }
 
   /**
-   * Issues the deferred SSE re-fetch, unless the fetch that just finished already satisfied it.
+   * Issues the deferred SSE re-fetch, unless the finished fetch already satisfied it.
    *
-   * @param fetchedLastModifiedMs `Last-Modified` of the config the completed fetch returned, or of
-   *        the config still held on a 304
+   * @param fetchedLastModifiedMs `Last-Modified` the completed fetch returned, or still holds on a 304
    */
   private _drainPendingSseRefetch(fetchedLastModifiedMs: number | undefined): void {
     if (!this._sseRefetchPending || this._stopped) {
