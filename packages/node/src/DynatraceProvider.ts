@@ -1,12 +1,20 @@
 import { FlagdCore } from '@openfeature/flagd-core';
 import type { EvaluationContext, JsonValue, Logger, Provider, ResolutionDetails, Hook } from '@openfeature/server-sdk';
 import { ErrorCode, OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk';
+import { MetricsAggregator } from '../../shared/src/metrics/aggregator.js';
+import { MetricsHook } from '../../shared/src/metrics/MetricsHook.js';
 import { CdnFetcher } from './cdnFetcher.js';
 import { isSuccess } from './fetchResult.js';
+import { ServerMetricsFlusher } from './metrics/ServerMetricsFlusher.js';
 import type { DynatraceProviderOptions, ProviderInternals } from './options.js';
-import { resolveProviderOptions } from './options.js';
+import {
+  DEFAULT_METRICS_HARD_CAP_DISTINCT_FLAGS,
+  DEFAULT_METRICS_SOFT_CAP_DISTINCT_FLAGS,
+  resolveProviderOptions,
+} from './options.js';
 import { PollingManager, DEFAULT_POLL_INTERVAL_MS } from './pollingManager.js';
 import { RetryStrategy } from './retry.js';
+import { PACKAGE_VERSION } from './version.js';
 
 /** STALE -> ERROR grace period (not user-configurable per spec). */
 export const GRACE_PERIOD_MS = 60_000;
@@ -18,17 +26,20 @@ export class DynatraceProvider implements Provider {
   public readonly metadata = { name: 'dynatrace' } as const;
   public readonly runsOn = 'server' as const;
   public readonly events = new OpenFeatureEventEmitter();
-  public readonly hooks: Hook[] = [];
+  public readonly hooks: Hook[];
 
   private readonly _options: ReturnType<typeof resolveProviderOptions>;
   private readonly _flagdCore: FlagdCore;
   private readonly _fetcher: CdnFetcher;
+  private readonly _metricsAggregator: MetricsAggregator;
+  private readonly _metricsFlusher: ServerMetricsFlusher;
   private readonly _gracePeriodMs: number;
   private readonly _pollIntervalMs: number;
 
   private _state: ProviderState = 'NOT_READY';
   private _shutdown = false;
   private _generation = 0;
+  private _closing: Promise<void> | undefined;
   private _graceTimer: ReturnType<typeof setTimeout> | undefined;
   private _pollingManager: PollingManager | undefined;
 
@@ -40,6 +51,26 @@ export class DynatraceProvider implements Provider {
 
     this._flagdCore = internals?.flagdCore ?? new FlagdCore();
     this._fetcher = new CdnFetcher(this._options.cdnUrl, new RetryStrategy(), internals?.fetch);
+    this._metricsAggregator = new MetricsAggregator({
+      gateOnVersion: true,
+      maxDistinctFlags: DEFAULT_METRICS_HARD_CAP_DISTINCT_FLAGS,
+    });
+    this._metricsFlusher =
+      internals?.metricsFlusher ??
+      new ServerMetricsFlusher({
+        aggregator: this._metricsAggregator,
+        sdkKey: this._options.sdkKey,
+        metricsUrl: this._options.metricsUrl,
+        softCapDistinctFlags: DEFAULT_METRICS_SOFT_CAP_DISTINCT_FLAGS,
+        sdkVersion: PACKAGE_VERSION,
+        providerName: this.metadata.name,
+        fetch: internals?.metricsFetch ?? internals?.fetch,
+      });
+    this.hooks = [
+      new MetricsHook(this._metricsAggregator, {
+        onRecord: () => this._metricsFlusher.onRecord(),
+      }),
+    ];
     this._gracePeriodMs = internals?.gracePeriodMs ?? GRACE_PERIOD_MS;
     this._pollIntervalMs = internals?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   }
@@ -48,6 +79,7 @@ export class DynatraceProvider implements Provider {
     // A re-initialize can overtake one still awaiting the CDN; generation ensures only the newest touches shared state.
     const generation = ++this._generation;
     this._shutdown = false;
+    this._closing = undefined;
     // A fresh lifecycle re-fetches in full; the previous validators would earn a 304 init cannot accept.
     this._fetcher.reset();
 
@@ -93,6 +125,8 @@ export class DynatraceProvider implements Provider {
     // Accepted body is the baseline: the first poll is conditional and the stale-node check has a lastModifiedAt.
     this._fetcher.commit();
 
+    this._updateMetricsVersionFromFlagSet();
+
     this._state = 'READY';
     return true;
   }
@@ -111,6 +145,7 @@ export class DynatraceProvider implements Provider {
       this._pollIntervalMs,
     );
     this._pollingManager.start();
+    this._metricsFlusher.start();
   }
 
   /** True once onClose() or a newer initialize() has taken over this lifecycle. */
@@ -118,15 +153,25 @@ export class DynatraceProvider implements Provider {
     return this._shutdown || generation !== this._generation;
   }
 
-  async onClose(): Promise<void> {
-    if (this._shutdown) {
-      return;
-    }
+  /**
+   * Closes the provider. Concurrent callers await the same shutdown.
+   *
+   * The SDK can call this more than once on one instance: provider replacement does not
+   * await it, and close() fans out over domain-scoped providers in parallel. Returning the
+   * in-flight promise keeps every caller waiting for the final metrics delivery.
+   */
+  onClose(): Promise<void> {
+    this._closing ??= this._close();
+    return this._closing;
+  }
+
+  private async _close(): Promise<void> {
     this._shutdown = true;
 
     this._pollingManager?.stop();
     this._pollingManager = undefined;
     this._cancelGraceTimer();
+    await this._metricsFlusher.shutdown();
     this._state = 'NOT_READY';
   }
 
@@ -212,7 +257,20 @@ export class DynatraceProvider implements Provider {
     if (this._shutdown) {
       throw new Error('storeFlags called after provider shutdown');
     }
-    return this._flagdCore.setConfigurations(json);
+    const sealedMetrics = this._metricsAggregator.drain();
+    this._metricsFlusher.enqueueSealedBatch(sealedMetrics);
+    this._metricsFlusher.triggerFlush();
+    const changedKeys = this._flagdCore.setConfigurations(json);
+    this._updateMetricsVersionFromFlagSet();
+    return changedKeys;
+  }
+
+  private _updateMetricsVersionFromFlagSet(): void {
+    const version = this._flagdCore.getFlagSetMetadata().version;
+    // The aggregator normalizes strings and numbers; anything else clears the gate rather
+    // than attributing new evaluations to the version the previous config carried.
+    const usable = typeof version === 'string' || typeof version === 'number';
+    this._metricsAggregator.setVersion(usable ? version : undefined);
   }
 
   private _onFetchSuccess(): void {

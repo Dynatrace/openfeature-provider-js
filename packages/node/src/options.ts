@@ -2,6 +2,7 @@ import { metricsUrlFromOrigin, validateOrigin } from '../../shared/src/origin.js
 import { buildCdnUrl, buildMetricsUrl, parseSdkKey, publicKey } from '../../shared/src/sdkKey.js';
 import type { FlagdCore } from '@openfeature/flagd-core';
 import type { FetchFn } from './cdnFetcher.js';
+import type { ServerMetricsFlusher } from './metrics/ServerMetricsFlusher.js';
 
 export const DEFAULT_METRICS_FLUSH_INTERVAL_MS = 30_000;
 export const DEFAULT_METRICS_SOFT_CAP_DISTINCT_FLAGS = 1_000;
@@ -19,6 +20,8 @@ export const DEFAULT_METRICS_HARD_CAP_DISTINCT_FLAGS = 2_000;
 export interface ProviderInternals {
   flagdCore?: FlagdCore;
   fetch?: FetchFn;
+  metricsFetch?: FetchFn;
+  metricsFlusher?: ServerMetricsFlusher;
   gracePeriodMs?: number;
   pollIntervalMs?: number;
 }

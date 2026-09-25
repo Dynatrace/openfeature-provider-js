@@ -10,21 +10,26 @@ function createMockFetch(handlers: {
   initialStatus?: number;
   onPoll?: (pollIndex: number) => { status: number; body?: string };
 }): typeof fetch {
-  let callCount = 0;
-  return vi.fn(async () => {
-    callCount++;
-    if (callCount === 1) {
+  let cdnCallCount = 0;
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (init?.method === 'POST' && url.includes('/v1/metrics')) {
+      return new Response(null, { status: 202 });
+    }
+
+    cdnCallCount++;
+    if (cdnCallCount === 1) {
       const status = handlers.initialStatus ?? 200;
       return new Response(handlers.initialBody ?? TEST_FLAG_JSON, {
         status,
         headers: { ETag: '"v1"' },
       });
     }
-    const pollIndex = callCount - 2;
+    const pollIndex = cdnCallCount - 2;
     const poll = handlers.onPoll?.(pollIndex) ?? { status: 304 };
     return new Response(poll.body ?? null, {
       status: poll.status,
-      headers: poll.body != null ? { ETag: `"v${callCount}"` } : {},
+      headers: poll.body != null ? { ETag: `"v${cdnCallCount}"` } : {},
     });
   }) as typeof fetch;
 }
@@ -311,5 +316,127 @@ describe('DynatraceProvider', () => {
     await provider.onClose();
     await provider.onClose();
     expect(provider.state).toBe('NOT_READY');
+  });
+
+  it('makes a concurrent onClose await the same shutdown', async () => {
+    let releaseMetrics: (value: Response) => void;
+    const metricsPosted = new Promise<Response>((resolve) => {
+      releaseMetrics = resolve;
+    });
+    const metricsFetch = vi.fn(() => metricsPosted) as unknown as typeof fetch;
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, {}, { fetch: createMockFetch({}), metricsFetch });
+
+    await provider.initialize();
+    const hook = provider.hooks[0];
+    hook.finally?.(
+      { flagKey: 'my-bool' } as any,
+      {
+        flagKey: 'my-bool',
+        value: true,
+        reason: 'STATIC',
+        variant: 'on',
+        flagMetadata: { version: '1741780800' },
+      } as any,
+    );
+
+    const first = provider.onClose();
+    let secondSettled = false;
+    const second = provider.onClose().then(() => {
+      secondSettled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    // The metrics POST is still on the wire, so neither caller may observe a closed provider.
+    expect(secondSettled).toBe(false);
+
+    releaseMetrics!(new Response(null, { status: 202 }));
+    await Promise.all([first, second]);
+
+    expect(secondSettled).toBe(true);
+    expect(provider.state).toBe('NOT_READY');
+  });
+
+  it('records metrics when the flag set version is numeric', async () => {
+    const numericVersionBody = TEST_FLAG_JSON.replace('"version":"1741780800"', '"version":1741780800');
+    const fetch = createMockFetch({ initialBody: numericVersionBody });
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, {}, { fetch, metricsFetch: fetch });
+
+    await provider.initialize();
+    const hook = provider.hooks[0];
+    hook.finally?.(
+      { flagKey: 'my-bool' } as any,
+      {
+        flagKey: 'my-bool',
+        value: true,
+        reason: 'STATIC',
+        variant: 'on',
+        flagMetadata: { version: 1741780800 },
+      } as any,
+    );
+
+    await provider.onClose();
+
+    // A numeric version must not leave the gate empty, which would drop every evaluation.
+    const metricsPost = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+      (call) => (call[1] as RequestInit).method === 'POST',
+    );
+    expect(metricsPost).toBeDefined();
+    expect(String((metricsPost![1] as RequestInit).body)).toContain('my-bool');
+  });
+
+  it('exposes a metrics hook', () => {
+    const provider = new DynatraceProvider(VALID_SERVER_KEY);
+    expect(provider.hooks).toHaveLength(1);
+  });
+
+  it('flushes evaluation metrics on close', async () => {
+    const fetch = createMockFetch({});
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, {}, { fetch, metricsFetch: fetch });
+
+    await provider.initialize();
+
+    const hook = provider.hooks[0];
+    hook.finally?.(
+      { flagKey: 'my-bool' } as any,
+      {
+        flagKey: 'my-bool',
+        value: true,
+        reason: 'STATIC',
+        variant: 'on',
+        flagMetadata: { version: '1741780800' },
+      } as any,
+    );
+
+    await provider.onClose();
+
+    const metricsCalls = (fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([, init]) => init?.method === 'POST');
+    expect(metricsCalls.length).toBeGreaterThan(0);
+    const body = JSON.parse(String(metricsCalls[0][1]?.body));
+    expect(body.sdkType).toBe('server');
+    expect(body.evaluations).toEqual(
+      expect.arrayContaining([expect.objectContaining({ flagKey: 'my-bool', count: 1 })]),
+    );
+  });
+
+  it('starts the metrics flusher even when the initial fetch fails', async () => {
+    const flusher = {
+      start: vi.fn(),
+      onRecord: vi.fn(),
+      enqueueSealedBatch: vi.fn(),
+      triggerFlush: vi.fn(),
+      shutdown: vi.fn(async () => {}),
+    };
+    const provider = new DynatraceProvider(
+      VALID_SERVER_KEY,
+      {},
+      { fetch: createMockFetch({ initialStatus: 404, initialBody: '' }), metricsFlusher: flusher as any },
+    );
+
+    await expect(provider.initialize()).rejects.toThrow('initial CDN fetch returned HTTP 404');
+
+    // _startPolling runs on the failed-init recovery path, and that is what must start the flusher
+    expect(flusher.start).toHaveBeenCalled();
+
+    await provider.onClose();
   });
 });
