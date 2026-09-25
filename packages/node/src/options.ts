@@ -51,6 +51,8 @@ export interface DynatraceProviderOptions {
 export interface ResolvedProviderOptions {
   sdkKey: string;
   cdnUrl: string;
+  /** Origin the CDN URL was built from; the fallback for an SSE endpoint without its own. */
+  configOrigin: string;
   metricsUrl: string;
   publicKey: string;
   sseEnabled: boolean;
@@ -79,6 +81,7 @@ export function resolveProviderOptions(
   return {
     sdkKey: trimmedKey,
     cdnUrl,
+    configOrigin: new URL(cdnUrl).origin,
     metricsUrl,
     publicKey: publicKey(trimmedKey),
     sseEnabled: options.disableSse !== true,

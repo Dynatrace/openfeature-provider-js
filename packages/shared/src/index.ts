@@ -16,7 +16,5 @@ export { MetricsHook } from './metrics/MetricsHook';
 
 export { resolveLogger, LOG_PREFIX } from './logger';
 
-export { parseSseMessage, unwrapSseData, SSE_TYPE_REFETCH_CONFIG, SSE_TYPE_REFETCH_EVALUATION } from './sse/sseMessage';
+export { parseSseMessage, unwrapSseData, safeJsonParse, SSE_TYPE_REFETCH_CONFIG } from './sse/sseMessage';
 export type { SseMessage } from './sse/sseMessage';
-
-export { sseUrlFrom, STREAM_TYPE_SSE } from './sse/cdnConfig';

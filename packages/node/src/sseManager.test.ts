@@ -1,18 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SseManager, maskSseUrl, type SseEventSource } from './sseManager';
+import { FakeEventSource } from './testFixtures';
 
 const URL_WITH_KEY = 'https://sse.us.fm.dynatrace.com/event-stream?v=1.2&key=SECRET&channels=dt01.server_us_x';
-
-class FakeEventSource implements SseEventSource {
-  onopen: ((event: unknown) => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onerror: ((event: { code?: number; message?: string }) => void) | null = null;
-  closed = false;
-
-  close(): void {
-    this.closed = true;
-  }
-}
 
 function setup(url = URL_WITH_KEY) {
   const source = new FakeEventSource();

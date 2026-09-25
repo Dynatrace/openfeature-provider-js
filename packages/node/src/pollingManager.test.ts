@@ -12,6 +12,7 @@ function makeCallbacks(overrides: Partial<PollingCallbacks> = {}): PollingCallba
     emitChange: vi.fn(),
     emitSuccess: vi.fn(),
     emitFailure: vi.fn(),
+    isNewerThanApplied: vi.fn(() => true),
     ...overrides,
   };
 }
@@ -325,10 +326,10 @@ describe('PollingManager SSE re-fetch', () => {
     manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:10 GMT'));
     expect(fetchFlags).toHaveBeenCalledTimes(1);
 
-    settle!({ status: 304, body: null, etag: null, lastModified: 'Wed, 01 Jan 2025 00:00:00 GMT' });
+    settle!({ status: 304, body: null, etag: null, lastModified: null });
     await vi.advanceTimersByTimeAsync(0);
 
-    // The fetch returned an older config than announced, so the deferred re-fetch still runs.
+    // The config in force is still older than the announced one, so the deferred re-fetch runs.
     expect(fetchFlags).toHaveBeenCalledTimes(2);
     manager.stop();
   });
@@ -341,7 +342,8 @@ describe('PollingManager SSE re-fetch', () => {
           settle = resolve;
         }),
     );
-    const callbacks = makeCallbacks({ fetchFlags });
+    const isNewerThanApplied = vi.fn(() => false);
+    const callbacks = makeCallbacks({ fetchFlags, isNewerThanApplied });
     const manager = new PollingManager(callbacks, 10_000);
     manager.start();
 
@@ -378,10 +380,11 @@ describe('PollingManager SSE re-fetch', () => {
     manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
     manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:10 GMT'));
 
-    // Satisfies the older announcement but not the greatest one, so one re-fetch is issued.
     settle!({ status: 200, body: '{}', etag: null, lastModified: 'Wed, 01 Jan 2025 00:00:20 GMT' });
     await vi.advanceTimersByTimeAsync(0);
 
+    // Only the greatest announcement is carried forward, and it drives a single re-fetch.
+    expect(callbacks.isNewerThanApplied).toHaveBeenCalledExactlyOnceWith(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
     expect(fetchFlags).toHaveBeenCalledTimes(2);
     manager.stop();
   });

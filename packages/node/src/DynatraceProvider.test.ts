@@ -2,7 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LOG_PREFIX } from '../../shared/src/logger';
 import { ProviderEvents } from '@openfeature/server-sdk';
 import { DynatraceProvider } from './DynatraceProvider';
-import { TEST_FLAG_JSON, VALID_SERVER_KEY, SSE_URL, ROTATED_SSE_URL, flagJsonWithSse } from './testFixtures';
+import {
+  TEST_FLAG_JSON,
+  VALID_SERVER_KEY,
+  SSE_URL,
+  ROTATED_SSE_URL,
+  flagJsonWithSse,
+  createCdnFetch,
+  FakeEventSource,
+  type CdnResponse,
+} from './testFixtures';
 
 const logger = {} as any;
 
@@ -472,40 +481,6 @@ describe('DynatraceProvider', () => {
   });
 });
 
-class FakeEventSource {
-  onopen: ((event: unknown) => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onerror: ((event: { code?: number; message?: string }) => void) | null = null;
-  closed = false;
-
-  close(): void {
-    this.closed = true;
-  }
-}
-
-interface CdnResponse {
-  status?: number;
-  body?: string;
-  lastModified?: string;
-}
-
-/** A CDN mock driven by an explicit response script, so a poll can return a different body. */
-function createScriptedFetch(responses: CdnResponse[]): typeof fetch {
-  let index = 0;
-  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (init?.method === 'POST' && String(input).includes('/v1/metrics')) {
-      return new Response(null, { status: 202 });
-    }
-    const response = responses[Math.min(index, responses.length - 1)];
-    index++;
-    const headers: Record<string, string> = { ETag: `"v${index}"` };
-    if (response.lastModified != null) {
-      headers['Last-Modified'] = response.lastModified;
-    }
-    return new Response(response.body ?? null, { status: response.status ?? 200, headers });
-  }) as typeof fetch;
-}
-
 const LM_1 = 'Wed, 01 Jan 2025 00:00:00 GMT';
 const LM_2 = 'Wed, 01 Jan 2025 00:01:00 GMT';
 
@@ -522,15 +497,16 @@ function createSseProvider(
     sources.push(source);
     return source;
   });
+  const fetchMock = createCdnFetch(responses);
   const provider = new DynatraceProvider(VALID_SERVER_KEY, options, {
-    fetch: createScriptedFetch(responses),
+    fetch: fetchMock,
     eventSourceFactory,
     pollIntervalMs: 100,
     pollIntervalSseConnectedMs: 10_000,
     sseDisconnectDebounceMs: 500,
     ...internals,
   } as any);
-  return { provider, sources, urls, eventSourceFactory };
+  return { provider, sources, urls, eventSourceFactory, fetch: internals.fetch ?? fetchMock };
 }
 
 describe('DynatraceProvider SSE', () => {
@@ -606,15 +582,18 @@ describe('DynatraceProvider SSE', () => {
   });
 
   it('ignores a message type it does not handle', async () => {
-    const { provider, sources } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_1 }, { status: 304 }]);
+    const { provider, sources, fetch } = createSseProvider([
+      { body: flagJsonWithSse(), lastModified: LM_1 },
+      { status: 304 },
+    ]);
     await provider.initialize();
     sources[0].onopen?.({});
-    const fetchCallsBefore = (provider as any)._fetcher;
+    const callsBefore = (fetch as any).mock.calls.length;
 
     sources[0].onmessage?.({ data: JSON.stringify({ type: 'refetchEvaluation' }) });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(fetchCallsBefore.committedLastModifiedMs).toBe(Date.parse(LM_1));
+    expect((fetch as any).mock.calls.length).toBe(callsBefore);
     await provider.onClose();
   });
 

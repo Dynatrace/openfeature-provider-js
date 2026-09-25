@@ -17,6 +17,8 @@ export interface PollingCallbacks {
   emitChange: (changedKeys: string[]) => void;
   emitSuccess: () => void;
   emitFailure: (reason: string) => void;
+  /** Whether a `Last-Modified`, in epoch milliseconds, is newer than the config in force. */
+  isNewerThanApplied: (lastModifiedMs: number) => boolean;
 }
 
 /**
@@ -36,11 +38,11 @@ export class PollingManager {
   private _stopped = true;
   private _intervalMs: number;
 
-  /** Set while an SSE re-fetch is waiting for the in-flight fetch to finish. */
-  private _sseRefetchPending = false;
-
-  /** Greatest `lastModified` announced by the coalesced messages; they can arrive out of order. */
-  private _sseRefetchLastModifiedMs: number | undefined;
+  /**
+   * The SSE re-fetch waiting for the in-flight fetch to finish, holding the greatest `lastModified`
+   * announced by the messages coalesced into it; they can arrive out of order.
+   */
+  private _pendingSseRefetch: { lastModifiedMs?: number } | undefined;
 
   private readonly _logger: Logger;
 
@@ -71,8 +73,7 @@ export class PollingManager {
     this._abortController?.abort();
     this._abortController = undefined;
     this._clearTimer();
-    this._sseRefetchPending = false;
-    this._sseRefetchLastModifiedMs = undefined;
+    this._pendingSseRefetch = undefined;
   }
 
   /**
@@ -102,10 +103,10 @@ export class PollingManager {
     }
 
     if (this._inFlight) {
-      this._sseRefetchPending = true;
-      if (lastModifiedMs != null) {
-        this._sseRefetchLastModifiedMs = Math.max(this._sseRefetchLastModifiedMs ?? 0, lastModifiedMs);
-      }
+      const pendingMs = this._pendingSseRefetch?.lastModifiedMs;
+      this._pendingSseRefetch = {
+        lastModifiedMs: lastModifiedMs == null ? pendingMs : Math.max(pendingMs ?? 0, lastModifiedMs),
+      };
       this._logger.debug('SSE re-fetch deferred: a fetch is already in flight');
       return;
     }
@@ -136,15 +137,12 @@ export class PollingManager {
   }
 
   private async _poll(signal: AbortSignal): Promise<void> {
-    let lastModifiedMs: number | undefined;
     try {
       const result = await this._callbacks.fetchFlags(signal);
 
       if (this._stopped || signal.aborted) {
         return;
       }
-
-      lastModifiedMs = parseLastModifiedMs(result.lastModified);
 
       if (isNotModified(result)) {
         this._logger.debug('flags not modified');
@@ -187,25 +185,20 @@ export class PollingManager {
       this._callbacks.emitFailure(message);
     } finally {
       this._inFlight = false;
-      this._drainPendingSseRefetch(lastModifiedMs);
+      this._drainPendingSseRefetch();
     }
   }
 
-  /**
-   * Issues the deferred SSE re-fetch, unless the finished fetch already satisfied it.
-   *
-   * @param fetchedLastModifiedMs `Last-Modified` the completed fetch returned, or still holds on a 304
-   */
-  private _drainPendingSseRefetch(fetchedLastModifiedMs: number | undefined): void {
-    if (!this._sseRefetchPending || this._stopped) {
+  /** Issues the deferred SSE re-fetch, unless the finished fetch already satisfied it. */
+  private _drainPendingSseRefetch(): void {
+    if (this._pendingSseRefetch == null || this._stopped) {
       return;
     }
 
-    const announcedMs = this._sseRefetchLastModifiedMs;
-    this._sseRefetchPending = false;
-    this._sseRefetchLastModifiedMs = undefined;
+    const announcedMs = this._pendingSseRefetch.lastModifiedMs;
+    this._pendingSseRefetch = undefined;
 
-    if (announcedMs != null && fetchedLastModifiedMs != null && fetchedLastModifiedMs >= announcedMs) {
+    if (announcedMs != null && !this._callbacks.isNewerThanApplied(announcedMs)) {
       this._logger.debug('deferred SSE re-fetch dropped: the completed fetch already returned that config');
       return;
     }
@@ -213,12 +206,4 @@ export class PollingManager {
     this._logger.debug('issuing deferred SSE re-fetch');
     this._runPoll();
   }
-}
-
-function parseLastModifiedMs(lastModified: string | null): number | undefined {
-  if (lastModified == null) {
-    return undefined;
-  }
-  const parsed = Date.parse(lastModified);
-  return Number.isNaN(parsed) ? undefined : parsed;
 }

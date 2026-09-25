@@ -16,7 +16,7 @@ import {
 import { PollingManager, DEFAULT_POLL_INTERVAL_MS, SSE_CONNECTED_POLL_INTERVAL_MS } from './pollingManager.js';
 import { RetryStrategy } from './retry.js';
 import { SseManager, defaultEventSourceFactory, type EventSourceFactory } from './sseManager.js';
-import { sseUrlFrom } from '../../shared/src/sse/cdnConfig.js';
+import { sseUrlFrom } from './sse/cdnConfig.js';
 import { SSE_TYPE_REFETCH_CONFIG, type SseMessage } from '../../shared/src/sse/sseMessage.js';
 import { PACKAGE_VERSION } from './version.js';
 
@@ -178,6 +178,7 @@ export class DynatraceProvider implements Provider {
         emitChange: (changedKeys) => this._emitConfigurationChanged(changedKeys),
         emitSuccess: () => this._onFetchSuccess(),
         emitFailure: (reason) => this._onFetchFailure(reason),
+        isNewerThanApplied: (lastModifiedMs) => this._fetcher.isNewerThanCommitted(lastModifiedMs),
       },
       this._pollIntervalMs,
       this._logger,
@@ -332,7 +333,7 @@ export class DynatraceProvider implements Provider {
       return;
     }
 
-    const url = sseUrlFrom(configJson, originOf(this._options.cdnUrl));
+    const url = sseUrlFrom(configJson, this._options.configOrigin);
 
     if (url == null) {
       if (this._sseManager != null) {
@@ -369,6 +370,7 @@ export class DynatraceProvider implements Provider {
       manager.start();
     } catch (err) {
       // Not fatal: polling still carries changes, just slower.
+      manager.stop();
       this._sseManager = undefined;
       this._logger.warn(
         `failed to open the SSE connection; falling back to polling only: ${err instanceof Error ? err.message : String(err)}`,
@@ -446,8 +448,7 @@ export class DynatraceProvider implements Provider {
 
     // providers.md 1.4: rapid writes can arrive out of order, so drop anything not newer.
     const announcedMs = message.lastModified != null ? message.lastModified * 1_000 : undefined;
-    const appliedMs = this._fetcher.committedLastModifiedMs;
-    if (announcedMs != null && appliedMs != null && announcedMs <= appliedMs) {
+    if (announcedMs != null && !this._fetcher.isNewerThanCommitted(announcedMs)) {
       this._logger.debug('ignoring SSE message: it announces a config no newer than the one in force');
       return;
     }
@@ -504,14 +505,5 @@ export class DynatraceProvider implements Provider {
     this._state = 'ERROR';
     this._logger.error(`grace period of ${this._gracePeriodMs}ms expired without a successful poll; CDN unreachable`);
     this.events.emit(ProviderEvents.Error, { message: 'grace period expired; CDN unreachable' });
-  }
-}
-
-/** Fallback origin for an SSE endpoint that does not carry its own. */
-function originOf(url: string): string | undefined {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return undefined;
   }
 }

@@ -15,13 +15,12 @@ describe('unwrapSseData', () => {
     expect(unwrapSseData(ablyFrame({ type: SSE_TYPE_REFETCH_CONFIG }))).toBe('{"type":"refetchConfig"}');
   });
 
-  it('returns a flat payload untouched', () => {
-    const flat = '{"type":"refetchConfig"}';
-    expect(unwrapSseData(flat)).toBe(flat);
+  it('returns null for a flat payload that is not a frame', () => {
+    expect(unwrapSseData('{"type":"refetchConfig"}')).toBeNull();
   });
 
-  it('returns an unparseable payload untouched', () => {
-    expect(unwrapSseData('not json')).toBe('not json');
+  it('returns null for an unparseable payload', () => {
+    expect(unwrapSseData('not json')).toBeNull();
   });
 });
 

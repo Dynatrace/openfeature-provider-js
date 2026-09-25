@@ -13,6 +13,7 @@ export interface SseEventSource {
 
 export type EventSourceFactory = (url: string) => SseEventSource;
 
+// The cast bridges the handler variance between this structural type and the concrete class.
 export const defaultEventSourceFactory: EventSourceFactory = (url) => new EventSource(url) as SseEventSource;
 
 export interface SseCallbacks {
@@ -38,6 +39,7 @@ export class SseManager {
   private _stopped = false;
 
   private readonly _logger: Logger;
+  private readonly _maskedUrl: string;
 
   constructor(
     private readonly _url: string,
@@ -46,6 +48,7 @@ export class SseManager {
     logger?: Logger,
   ) {
     this._logger = logger ?? resolveLogger();
+    this._maskedUrl = maskSseUrl(_url);
   }
 
   /** The stream URL this manager was built for; the provider compares it to spot a rotation. */
@@ -62,17 +65,11 @@ export class SseManager {
     this._source = source;
 
     source.onopen = () => {
-      if (this._stopped) {
-        return;
-      }
-      this._logger.info(`SSE connection opened (${maskSseUrl(this._url)})`);
+      this._logger.info(`SSE connection opened (${this._maskedUrl})`);
       this._callbacks.onConnected();
     };
 
     source.onmessage = (event) => {
-      if (this._stopped) {
-        return;
-      }
       const message = parseSseMessage(event?.data);
       if (message == null) {
         this._logger.debug('SSE message dropped: payload was not a recognisable envelope');
@@ -83,11 +80,8 @@ export class SseManager {
     };
 
     source.onerror = (event) => {
-      if (this._stopped) {
-        return;
-      }
       const status = event?.code != null ? ` status ${event.code},` : '';
-      this._logger.warn(`SSE connection error (${maskSseUrl(this._url)}):${status} ${event?.message ?? 'no message'}`);
+      this._logger.warn(`SSE connection error (${this._maskedUrl}):${status} ${event?.message ?? 'no message'}`);
       this._callbacks.onDisconnected();
     };
   }
