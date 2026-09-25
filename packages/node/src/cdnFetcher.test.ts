@@ -238,6 +238,37 @@ describe('CdnFetcher', () => {
     expect(result.body).toBeNull();
   });
 
+  it('treats an equal Last-Modified as 304 (stale-node defense)', async () => {
+    // a re-served body with the same Last-Modified is not newer, so it must be rejected
+    fetchMock
+      .mockResolvedValueOnce(
+        makeResponse(200, {
+          body: MINIMAL_FLAGS_BODY,
+          headers: {
+            [HEADER_ETAG]: TEST_ETAG,
+            [HEADER_LAST_MODIFIED]: LAST_MODIFIED_NEW,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeResponse(200, {
+          body: 'stale-body',
+          headers: {
+            [HEADER_ETAG]: '"stale-etag"',
+            [HEADER_LAST_MODIFIED]: LAST_MODIFIED_NEW,
+          },
+        }),
+      );
+
+    const client = fetcher();
+    await client.fetch();
+    client.commit();
+    const result = await client.fetch();
+
+    expect(result.status).toBe(304);
+    expect(result.body).toBeNull();
+  });
+
   it('keeps the previous validators until the body is committed', async () => {
     fetchMock.mockImplementation(async () =>
       makeResponse(200, {
