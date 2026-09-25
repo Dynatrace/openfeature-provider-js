@@ -48,6 +48,11 @@ const provider = new DynatraceProvider(sdkKey, {
 | `metricsOrigin` | `string` | derived from SDK key | Override the evaluation metrics ingest origin.                       |
 | `logger`        | `Logger` | console (warn/error) | Receives provider diagnostics. The default drops `info` and `debug`. |
 
+## Examples
+
+A runnable quickstart lives in [`examples/`](examples). See its
+[README](examples/README.md) for the environment variables it accepts.
+
 ## License
 
 Apache 2.0 — see [LICENSE](../../LICENSE).
