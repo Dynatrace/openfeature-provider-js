@@ -162,6 +162,21 @@ describe('DynatraceProvider', () => {
     await provider.onClose();
   });
 
+  it('does not leave the first poller running when initialize runs again without onClose', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(TEST_FLAG_JSON, { status: 200, headers: { ETag: '"v1"' } }),
+    ) as unknown as typeof fetch;
+    const provider = new DynatraceProvider(VALID_SERVER_KEY, {}, { fetch: fetchMock, pollIntervalMs: 10 });
+
+    await provider.initialize(); // starts the first poller
+    await provider.initialize(); // must stop the first before starting the second
+    await provider.onClose();
+
+    const callsAfterClose = (fetchMock as any).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(100);
+    expect((fetchMock as any).mock.calls.length).toBe(callsAfterClose);
+  });
+
   it('throws when initial CDN fetch fails', async () => {
     const provider = new DynatraceProvider(
       VALID_SERVER_KEY,

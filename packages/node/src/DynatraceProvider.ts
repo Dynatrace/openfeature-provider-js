@@ -115,6 +115,7 @@ export class DynatraceProvider implements Provider {
   }
 
   private _startPolling(): void {
+    this._pollingManager?.stop();
     this._pollingManager = new PollingManager(
       {
         fetchFlags: (signal) => this._fetcher.fetch(signal),
