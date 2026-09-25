@@ -8,17 +8,12 @@ import { resolveProviderOptions } from './options.js';
 import { PollingManager, DEFAULT_POLL_INTERVAL_MS } from './pollingManager.js';
 import { RetryStrategy } from './retry.js';
 
-/** STALE → ERROR grace period (not user-configurable per spec). */
+/** STALE -> ERROR grace period (not user-configurable per spec). */
 export const GRACE_PERIOD_MS = 60_000;
 
 type ProviderState = 'NOT_READY' | 'READY' | 'STALE' | 'ERROR';
 
-/**
- * Dynatrace OpenFeature provider for Node.js (server-side).
- *
- * Fetches flagd config from the fm-service CDN, evaluates in-process via flagd-core,
- * and polls on a fixed 10s interval with READY → STALE → ERROR state transitions.
- */
+/** Dynatrace OpenFeature server provider for Node.js: flagd config from the fm-service CDN, in-process eval via flagd-core, 10s polling with READY -> STALE -> ERROR transitions. */
 export class DynatraceProvider implements Provider {
   public readonly metadata = { name: 'dynatrace' } as const;
   public readonly runsOn = 'server' as const;
@@ -50,13 +45,10 @@ export class DynatraceProvider implements Provider {
   }
 
   async initialize(_context?: EvaluationContext): Promise<void> {
-    // The SDK re-initializes an instance that was replaced and then set again, so a second
-    // initialize() can start while the first is still awaiting the CDN. Only the newest one
-    // may touch shared state; an older one would leave behind a poller nothing can stop.
+    // A re-initialize can overtake one still awaiting the CDN; generation ensures only the newest touches shared state.
     const generation = ++this._generation;
     this._shutdown = false;
-    // A fresh lifecycle re-fetches the configuration in full: the validators from the
-    // previous one would otherwise earn a 304 that initialization cannot accept.
+    // A fresh lifecycle re-fetches in full; the previous validators would earn a 304 init cannot accept.
     this._fetcher.reset();
 
     try {
@@ -64,10 +56,7 @@ export class DynatraceProvider implements Provider {
         return;
       }
     } catch (err) {
-      // The timer starts even though initialization failed, per fm-knowledge-base
-      // providers.md 5: the provider holds no config and therefore no SSE URL, so the next
-      // poll tick is the only thing left that can recover it. Without this it would stay
-      // dead for the life of the process.
+      // Start polling even though init failed (providers.md 5): the next tick is the only thing that can recover it.
       if (!this._isSuperseded(generation)) {
         this._startPolling();
       }
@@ -77,12 +66,7 @@ export class DynatraceProvider implements Provider {
     this._startPolling();
   }
 
-  /**
-   * Runs the initial CDN fetch and loads what it returns.
-   *
-   * Returns false when a newer lifecycle took over mid-fetch, in which case this one must
-   * touch nothing further, the poller included.
-   */
+  /** Runs the initial CDN fetch and loads it; returns false if a newer lifecycle took over mid-fetch. */
   private async _loadInitialConfig(generation: number): Promise<boolean> {
     const result = await this._fetcher.fetch();
 
@@ -106,8 +90,7 @@ export class DynatraceProvider implements Provider {
       throw new Error(`initial CDN config is invalid: ${message}`);
     }
 
-    // The body is accepted, so its validators become the baseline: the first poll is then
-    // conditional, and the stale-node check has a lastModifiedAt to compare against.
+    // Accepted body is the baseline: the first poll is conditional and the stale-node check has a lastModifiedAt.
     this._fetcher.commit();
 
     this._state = 'READY';
@@ -234,9 +217,7 @@ export class DynatraceProvider implements Provider {
 
   private _onFetchSuccess(): void {
     this._cancelGraceTimer();
-    // NOT_READY is reachable here because a failed initialization still leaves the poller
-    // running (providers.md 5), so the first tick that lands a config is what makes the
-    // provider usable at all.
+    // NOT_READY is reachable: a failed init leaves the poller running, so the first good tick makes us usable.
     if (this._state !== 'READY') {
       this._state = 'READY';
       this.events.emit(ProviderEvents.Ready, { message: 'recovered' });
