@@ -1,3 +1,5 @@
+import type { Logger } from '@openfeature/server-sdk';
+import { resolveLogger } from '../../../shared/src/logger.js';
 import type { DrainedBatch, MetricsAggregator } from '../../../shared/src/metrics/aggregator.js';
 import { buildPayload } from '../../../shared/src/metrics/payload.js';
 import type { FetchFn } from '../cdnFetcher.js';
@@ -17,6 +19,7 @@ export interface ServerMetricsFlusherOptions {
   providerName: string;
   fetch?: FetchFn;
   now?: () => number;
+  logger?: Logger;
 }
 
 /**
@@ -44,6 +47,7 @@ export class ServerMetricsFlusher {
   private _nextOutOfBandFlushAllowedMs = 0;
   private _periodicTimer: ReturnType<typeof setInterval> | undefined;
   private _workerChain: Promise<void> = Promise.resolve();
+  private readonly _logger: Logger;
 
   constructor(options: ServerMetricsFlusherOptions) {
     this._aggregator = options.aggregator;
@@ -55,6 +59,7 @@ export class ServerMetricsFlusher {
     this._providerName = options.providerName;
     this._fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
     this._now = options.now ?? (() => Date.now());
+    this._logger = options.logger ?? resolveLogger();
   }
 
   /**
@@ -80,6 +85,7 @@ export class ServerMetricsFlusher {
       return;
     }
     if (this._sealedBatchCount + 1 > MAX_SEALED_BATCHES) {
+      this._logger.warn(`dropping a sealed metrics batch; the queue is at its ${MAX_SEALED_BATCHES} batch limit`);
       return;
     }
     this._sealedBatchCount++;
@@ -229,10 +235,17 @@ export class ServerMetricsFlusher {
         return true;
       }
       if (response.status === 400) {
+        // The server rejected the payload itself, so a retry would fail identically.
+        this._logger.warn(
+          `metrics batch rejected as invalid (HTTP 400); dropping ${batch.evaluations.size} flag entries`,
+        );
         return true;
       }
-    } catch {
+      this._logger.warn(`metrics flush returned HTTP ${response.status}; retrying on the next flush`);
+    } catch (err) {
       // Transport errors and timeouts are retried on the next flush cycle.
+      const message = err instanceof Error ? err.message : String(err);
+      this._logger.warn(`metrics flush failed: ${message}`);
     }
 
     this._nextOutOfBandFlushAllowedMs = this._now() + FAILED_CAPACITY_RETRY_COOLDOWN_MS;

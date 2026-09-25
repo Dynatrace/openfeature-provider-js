@@ -1,3 +1,5 @@
+import type { Logger } from '@openfeature/server-sdk';
+import { resolveLogger } from '../../shared/src/logger.js';
 import { isAbortError } from './abort';
 import { isNotModified, isRateLimited, isSuccess, type FetchResult } from './fetchResult';
 
@@ -30,10 +32,15 @@ export class PollingManager {
   private _inFlight = false;
   private _stopped = true;
 
+  private readonly _logger: Logger;
+
   constructor(
     private readonly _callbacks: PollingCallbacks,
     private readonly _intervalMs: number = DEFAULT_POLL_INTERVAL_MS,
-  ) {}
+    logger?: Logger,
+  ) {
+    this._logger = logger ?? resolveLogger();
+  }
 
   start(): void {
     if (!this._stopped && this._timer != null) {
@@ -74,20 +81,24 @@ export class PollingManager {
       }
 
       if (isNotModified(result)) {
+        this._logger.debug('flags not modified');
         this._callbacks.emitSuccess();
         return;
       }
 
       if (isRateLimited(result)) {
+        this._logger.debug('rate limited; serving cached values');
         return;
       }
 
       if (!isSuccess(result)) {
+        this._logger.warn(`poll returned a non-success status: HTTP ${result.status}`);
         this._callbacks.emitFailure(`HTTP ${result.status}`);
         return;
       }
 
       if (result.body == null || result.body === '') {
+        this._logger.warn('poll returned an empty response body');
         this._callbacks.emitFailure('empty response body');
         return;
       }
@@ -97,13 +108,16 @@ export class PollingManager {
 
       this._callbacks.emitSuccess();
       if (changedKeys.length > 0) {
+        this._logger.info(`flag configuration changed: ${changedKeys.join(', ')}`);
         this._callbacks.emitChange(changedKeys);
       }
     } catch (err) {
       if (this._stopped || signal.aborted || isAbortError(err)) {
+        this._logger.debug('poll cancelled');
         return;
       }
       const message = err instanceof Error ? err.message : String(err);
+      this._logger.warn(`poll failed: ${message}`);
       this._callbacks.emitFailure(message);
     } finally {
       this._inFlight = false;

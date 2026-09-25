@@ -1,3 +1,5 @@
+import type { Logger } from '@openfeature/server-sdk';
+import { resolveLogger } from '../../shared/src/logger.js';
 import type { FetchResult } from './fetchResult';
 import { RetryStrategy } from './retry';
 
@@ -53,12 +55,17 @@ export class CdnFetcher {
   private _pendingState: CacheState | null = null;
   private _rateLimitedUntil = 0;
 
+  private readonly _logger: Logger;
+
   constructor(
     private readonly _url: string,
     private readonly _retryStrategy: RetryStrategy,
     private readonly _fetch: FetchFn = globalThis.fetch.bind(globalThis),
     private readonly _now: () => number = Date.now,
-  ) {}
+    logger?: Logger,
+  ) {
+    this._logger = logger ?? resolveLogger();
+  }
 
   isRateLimited(): boolean {
     return this._now() < this._rateLimitedUntil;
@@ -138,6 +145,7 @@ export class CdnFetcher {
     if (status === 429) {
       const retryAfterMs = parseRetryAfterMs(response.headers.get(HEADER_RETRY_AFTER), this._now());
       this._rateLimitedUntil = this._now() + retryAfterMs;
+      this._logger.debug(`rate limited by the CDN; suppressing requests for ${retryAfterMs}ms`);
       return { status: 429, body: null, etag: null, lastModified: null };
     }
 
@@ -155,6 +163,7 @@ export class CdnFetcher {
         // This is a real answer from the CDN, so it counts as a
         // successful poll exactly like a 304 (see fm-provider-test-harness cdn.feature,
         // "A 200 whose Last-Modified is not newer is ignored").
+        this._logger.warn('CDN served a config older than the cached one; ignoring it (stale node)');
         return this._notModified();
       }
 

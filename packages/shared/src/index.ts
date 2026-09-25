@@ -13,3 +13,5 @@ export { buildPayload } from './metrics/payload';
 export type { FlushPayload, FlushRecord, BuildPayloadMetadata } from './metrics/payload';
 
 export { MetricsHook } from './metrics/MetricsHook';
+
+export { resolveLogger, LOG_PREFIX } from './logger';

@@ -42,10 +42,11 @@ const provider = new DynatraceProvider(sdkKey, {
 });
 ```
 
-| Option          | Type     | Default              | Description                                    |
-| --------------- | -------- | -------------------- | ---------------------------------------------- |
-| `configOrigin`  | `string` | derived from SDK key | Override the flag configuration origin.        |
-| `metricsOrigin` | `string` | derived from SDK key | Override the evaluation metrics ingest origin. |
+| Option          | Type     | Default              | Description                                                          |
+| --------------- | -------- | -------------------- | -------------------------------------------------------------------- |
+| `configOrigin`  | `string` | derived from SDK key | Override the flag configuration origin.                              |
+| `metricsOrigin` | `string` | derived from SDK key | Override the evaluation metrics ingest origin.                       |
+| `logger`        | `Logger` | console (warn/error) | Receives provider diagnostics. The default drops `info` and `debug`. |
 
 ## License
 
