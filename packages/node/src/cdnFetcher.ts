@@ -72,6 +72,15 @@ export class CdnFetcher {
   }
 
   /**
+   * `Last-Modified` of the config currently in force, in epoch milliseconds, or `null` when the
+   * CDN has not sent one. Staged validators do not count: this is what the provider has accepted,
+   * which is what an SSE message's `lastModified` has to beat to be worth acting on.
+   */
+  get committedLastModifiedMs(): number | null {
+    return this._state.lastModifiedAt?.getTime() ?? null;
+  }
+
+  /**
    * Drops the cached validators so the next fetch performs an unconditional GET.
    *
    * A provider that is closed and registered again starts a fresh lifecycle and expects a

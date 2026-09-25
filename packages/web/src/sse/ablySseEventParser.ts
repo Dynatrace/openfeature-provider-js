@@ -1,5 +1,6 @@
 import { defaultSseEventParser } from '@openfeature/ofrep-web-provider';
 import type { EventStreamMessage } from '@openfeature/ofrep-core';
+import { unwrapSseData } from '../../../shared/src/sse/sseMessage.js';
 
 /**
  * Parses an SSE `MessageEvent` delivered by Ably into an OFREP
@@ -18,10 +19,9 @@ import type { EventStreamMessage } from '@openfeature/ofrep-core';
  * ```
  */
 export function parseAblySseEvent(event: MessageEvent<string>): EventStreamMessage {
-  const frame = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-
-  if (typeof frame?.data === 'string') {
-    return defaultSseEventParser({ data: frame.data } as MessageEvent);
+  const payload = unwrapSseData(event.data);
+  if (payload === event.data) {
+    return defaultSseEventParser(event);
   }
-  return defaultSseEventParser(event);
+  return defaultSseEventParser({ data: payload } as MessageEvent);
 }

@@ -228,3 +228,199 @@ describe('PollingManager', () => {
     expect(callbacks.fetchFlags).toHaveBeenCalled();
   });
 });
+
+describe('PollingManager cadence switching', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('re-anchors the schedule to now when the interval changes', async () => {
+    const callbacks = makeCallbacks();
+    const manager = new PollingManager(callbacks, 1_000);
+    manager.start();
+
+    // 900ms into a 1000ms interval, drop to 100ms: the next poll is 100ms away, not 100ms
+    // into a schedule that still remembers the old anchor.
+    await vi.advanceTimersByTimeAsync(900);
+    expect(callbacks.fetchFlags).not.toHaveBeenCalled();
+
+    manager.setIntervalMs(100);
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(callbacks.fetchFlags).toHaveBeenCalledTimes(1);
+    expect(manager.intervalMs).toBe(100);
+    manager.stop();
+  });
+
+  it('leaves the schedule alone when the interval is unchanged', async () => {
+    const callbacks = makeCallbacks();
+    const manager = new PollingManager(callbacks, 100);
+    manager.start();
+
+    await vi.advanceTimersByTimeAsync(90);
+    manager.setIntervalMs(100);
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(callbacks.fetchFlags).toHaveBeenCalledTimes(1);
+    manager.stop();
+  });
+});
+
+describe('PollingManager SSE re-fetch', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('fetches immediately when the slot is free', async () => {
+    const callbacks = makeCallbacks();
+    const manager = new PollingManager(callbacks, 10_000);
+    manager.start();
+
+    manager.requestSseRefetch();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(callbacks.fetchFlags).toHaveBeenCalledTimes(1);
+    manager.stop();
+  });
+
+  it('does not disturb the poll cadence', async () => {
+    const callbacks = makeCallbacks();
+    const manager = new PollingManager(callbacks, 1_000);
+    manager.start();
+
+    await vi.advanceTimersByTimeAsync(900);
+    manager.requestSseRefetch();
+    await vi.advanceTimersByTimeAsync(100);
+
+    // The out-of-band fetch plus the tick that was already due: the ticker was not re-anchored.
+    expect(callbacks.fetchFlags).toHaveBeenCalledTimes(2);
+    manager.stop();
+  });
+
+  it('defers a re-fetch that lands while a fetch is running, then issues it', async () => {
+    let settle: (value: FetchResult) => void;
+    const fetchFlags = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<FetchResult>((resolve) => {
+            settle = resolve;
+          }),
+      )
+      .mockResolvedValue({ status: 304, body: null, etag: null, lastModified: null });
+    const callbacks = makeCallbacks({ fetchFlags });
+    const manager = new PollingManager(callbacks, 10);
+    manager.start();
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+
+    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:10 GMT'));
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+
+    settle!({ status: 304, body: null, etag: null, lastModified: 'Wed, 01 Jan 2025 00:00:00 GMT' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The in-flight fetch returned an older config than the one announced, so the deferred
+    // re-fetch still has something to collect.
+    expect(fetchFlags).toHaveBeenCalledTimes(2);
+    manager.stop();
+  });
+
+  it('drops the deferred re-fetch when the finished fetch already returned that config', async () => {
+    let settle: (value: FetchResult) => void;
+    const fetchFlags = vi.fn(
+      () =>
+        new Promise<FetchResult>((resolve) => {
+          settle = resolve;
+        }),
+    );
+    const callbacks = makeCallbacks({ fetchFlags });
+    const manager = new PollingManager(callbacks, 10_000);
+    manager.start();
+
+    manager.requestSseRefetch();
+    await vi.advanceTimersByTimeAsync(0);
+    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:00 GMT'));
+
+    settle!({ status: 200, body: '{}', etag: null, lastModified: 'Wed, 01 Jan 2025 00:00:05 GMT' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+    manager.stop();
+  });
+
+  it('coalesces several deferred re-fetches into one, keeping the greatest lastModified', async () => {
+    let settle: (value: FetchResult) => void;
+    const fetchFlags = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<FetchResult>((resolve) => {
+            settle = resolve;
+          }),
+      )
+      .mockResolvedValue({ status: 304, body: null, etag: null, lastModified: null });
+    const callbacks = makeCallbacks({ fetchFlags });
+    const manager = new PollingManager(callbacks, 10_000);
+    manager.start();
+
+    manager.requestSseRefetch();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Out-of-order notifications: the newest is announced first.
+    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
+    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:10 GMT'));
+
+    // The completed fetch satisfies the older announcement but not the greatest one, so the
+    // single coalesced re-fetch is still issued.
+    settle!({ status: 200, body: '{}', etag: null, lastModified: 'Wed, 01 Jan 2025 00:00:20 GMT' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(fetchFlags).toHaveBeenCalledTimes(2);
+    manager.stop();
+  });
+
+  it('ignores a re-fetch requested after stop', async () => {
+    const callbacks = makeCallbacks();
+    const manager = new PollingManager(callbacks, 10_000);
+    manager.start();
+    manager.stop();
+
+    manager.requestSseRefetch();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(callbacks.fetchFlags).not.toHaveBeenCalled();
+  });
+
+  it('abandons a deferred re-fetch when the manager stops mid-fetch', async () => {
+    let settle: (value: FetchResult) => void;
+    const fetchFlags = vi.fn(
+      () =>
+        new Promise<FetchResult>((resolve) => {
+          settle = resolve;
+        }),
+    );
+    const callbacks = makeCallbacks({ fetchFlags });
+    const manager = new PollingManager(callbacks, 10_000);
+    manager.start();
+
+    manager.requestSseRefetch();
+    await vi.advanceTimersByTimeAsync(0);
+    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
+    manager.stop();
+
+    settle!({ status: 304, body: null, etag: null, lastModified: null });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+  });
+});

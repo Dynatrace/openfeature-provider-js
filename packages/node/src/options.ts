@@ -4,6 +4,7 @@ import type { Logger } from '@openfeature/server-sdk';
 import type { FlagdCore } from '@openfeature/flagd-core';
 import type { FetchFn } from './cdnFetcher.js';
 import type { ServerMetricsFlusher } from './metrics/ServerMetricsFlusher.js';
+import type { EventSourceFactory } from './sseManager.js';
 
 export const DEFAULT_METRICS_FLUSH_INTERVAL_MS = 30_000;
 export const DEFAULT_METRICS_SOFT_CAP_DISTINCT_FLAGS = 1_000;
@@ -25,6 +26,9 @@ export interface ProviderInternals {
   metricsFlusher?: ServerMetricsFlusher;
   gracePeriodMs?: number;
   pollIntervalMs?: number;
+  pollIntervalSseConnectedMs?: number;
+  sseDisconnectDebounceMs?: number;
+  eventSourceFactory?: EventSourceFactory;
 }
 
 export interface DynatraceProviderOptions {
@@ -32,6 +36,13 @@ export interface DynatraceProviderOptions {
   configOrigin?: string;
   /** Override the metrics origin (scheme, host, and port; no path, query, or fragment). */
   metricsOrigin?: string;
+  /**
+   * Opts out of SSE change notifications, leaving polling as the only update mechanism.
+   *
+   * Polling then stays at its 10s cadence rather than relaxing to the 10m safety-net cadence
+   * SSE allows, so changes are still picked up; they just take longer to arrive.
+   */
+  disableSse?: boolean;
   /**
    * Receives provider diagnostics. Defaults to the OpenFeature console logger, which emits
    * `error` and `warn` and drops `info` and `debug`; supply one to capture those levels.
@@ -44,6 +55,7 @@ export interface ResolvedProviderOptions {
   cdnUrl: string;
   metricsUrl: string;
   publicKey: string;
+  sseEnabled: boolean;
 }
 
 export function resolveProviderOptions(
@@ -71,5 +83,6 @@ export function resolveProviderOptions(
     cdnUrl,
     metricsUrl,
     publicKey: publicKey(trimmedKey),
+    sseEnabled: options.disableSse !== true,
   };
 }
