@@ -1,14 +1,19 @@
+import { FlagdCore } from '@openfeature/flagd-core';
 import type { EvaluationContext, JsonValue, Logger, Provider, ResolutionDetails, Hook } from '@openfeature/server-sdk';
 import { ErrorCode, OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/server-sdk';
-import type { DynatraceProviderOptions } from './options';
-import { resolveProviderOptions } from './options';
+import { CdnFetcher } from './cdnFetcher.js';
+import { isSuccess } from './fetchResult.js';
+import type { DynatraceProviderOptions, ProviderInternals } from './options.js';
+import { resolveProviderOptions } from './options.js';
+import { PollingManager, DEFAULT_POLL_INTERVAL_MS } from './pollingManager.js';
+import { RetryStrategy } from './retry.js';
 
-/**
- * Dynatrace OpenFeature provider for Node.js (server-side).
- *
- * Stub implementation: lifecycle and evaluation methods are wired but CDN polling
- * and flagd-core integration land in subsequent PRs.
- */
+/** STALE -> ERROR grace period (not user-configurable per spec). */
+export const GRACE_PERIOD_MS = 60_000;
+
+type ProviderState = 'NOT_READY' | 'READY' | 'STALE' | 'ERROR';
+
+/** Dynatrace OpenFeature server provider for Node.js: flagd config from the fm-service CDN, in-process eval via flagd-core, 10s polling with READY -> STALE -> ERROR transitions. */
 export class DynatraceProvider implements Provider {
   public readonly metadata = { name: 'dynatrace' } as const;
   public readonly runsOn = 'server' as const;
@@ -16,60 +21,170 @@ export class DynatraceProvider implements Provider {
   public readonly hooks: Hook[] = [];
 
   private readonly _options: ReturnType<typeof resolveProviderOptions>;
-  private _initialized = false;
+  private readonly _flagdCore: FlagdCore;
+  private readonly _fetcher: CdnFetcher;
+  private readonly _gracePeriodMs: number;
+  private readonly _pollIntervalMs: number;
 
-  constructor(sdkKey: string, options?: DynatraceProviderOptions) {
+  private _state: ProviderState = 'NOT_READY';
+  private _shutdown = false;
+  private _generation = 0;
+  private _graceTimer: ReturnType<typeof setTimeout> | undefined;
+  private _pollingManager: PollingManager | undefined;
+
+  constructor(sdkKey: string, options?: DynatraceProviderOptions);
+  /** @internal Test seam; stripped from the published declarations. */
+  constructor(sdkKey: string, options: DynatraceProviderOptions | undefined, internals: ProviderInternals);
+  constructor(sdkKey: string, options?: DynatraceProviderOptions, internals?: ProviderInternals) {
     this._options = resolveProviderOptions(sdkKey, options);
+
+    this._flagdCore = internals?.flagdCore ?? new FlagdCore();
+    this._fetcher = new CdnFetcher(this._options.cdnUrl, new RetryStrategy(), internals?.fetch);
+    this._gracePeriodMs = internals?.gracePeriodMs ?? GRACE_PERIOD_MS;
+    this._pollIntervalMs = internals?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   }
 
   async initialize(_context?: EvaluationContext): Promise<void> {
-    this._initialized = true;
-    this.events.emit(ProviderEvents.Ready);
+    // A re-initialize can overtake one still awaiting the CDN; generation ensures only the newest touches shared state.
+    const generation = ++this._generation;
+    this._shutdown = false;
+    // A fresh lifecycle re-fetches in full; the previous validators would earn a 304 init cannot accept.
+    this._fetcher.reset();
+
+    try {
+      if (!(await this._loadInitialConfig(generation))) {
+        return;
+      }
+    } catch (err) {
+      // Start polling even though init failed (providers.md 5): the next tick is the only thing that can recover it.
+      if (!this._isSuperseded(generation)) {
+        this._startPolling();
+      }
+      throw err;
+    }
+
+    this._startPolling();
+  }
+
+  /** Runs the initial CDN fetch and loads it; returns false if a newer lifecycle took over mid-fetch. */
+  private async _loadInitialConfig(generation: number): Promise<boolean> {
+    const result = await this._fetcher.fetch();
+
+    if (!isSuccess(result)) {
+      throw new Error(`initial CDN fetch returned HTTP ${result.status}`);
+    }
+
+    const body = result.body;
+    if (body == null || body.trim() === '') {
+      throw new Error('initial CDN response body was empty');
+    }
+
+    if (this._isSuperseded(generation)) {
+      return false;
+    }
+
+    try {
+      this._flagdCore.setConfigurations(body);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`initial CDN config is invalid: ${message}`);
+    }
+
+    // Accepted body is the baseline: the first poll is conditional and the stale-node check has a lastModifiedAt.
+    this._fetcher.commit();
+
+    this._state = 'READY';
+    return true;
+  }
+
+  private _startPolling(): void {
+    this._pollingManager?.stop();
+    this._pollingManager = new PollingManager(
+      {
+        fetchFlags: (signal) => this._fetcher.fetch(signal),
+        storeFlags: (json) => this._storeFlags(json),
+        commitFetch: () => this._fetcher.commit(),
+        emitChange: (changedKeys) => this._emitConfigurationChanged(changedKeys),
+        emitSuccess: () => this._onFetchSuccess(),
+        emitFailure: (reason) => this._onFetchFailure(reason),
+      },
+      this._pollIntervalMs,
+    );
+    this._pollingManager.start();
+  }
+
+  /** True once onClose() or a newer initialize() has taken over this lifecycle. */
+  private _isSuperseded(generation: number): boolean {
+    return this._shutdown || generation !== this._generation;
   }
 
   async onClose(): Promise<void> {
-    this._initialized = false;
+    if (this._shutdown) {
+      return;
+    }
+    this._shutdown = true;
+
+    this._pollingManager?.stop();
+    this._pollingManager = undefined;
+    this._cancelGraceTimer();
+    this._state = 'NOT_READY';
   }
 
   resolveBooleanEvaluation(
     flagKey: string,
     defaultValue: boolean,
-    _context: EvaluationContext,
-    _logger: Logger,
+    context: EvaluationContext,
+    logger: Logger,
   ): Promise<ResolutionDetails<boolean>> {
-    return Promise.resolve(this._notReady(flagKey, defaultValue));
+    return Promise.resolve(
+      this._evaluate(defaultValue, () =>
+        this._flagdCore.resolveBooleanEvaluation(flagKey, defaultValue, context, logger),
+      ),
+    );
   }
 
   resolveStringEvaluation(
     flagKey: string,
     defaultValue: string,
-    _context: EvaluationContext,
-    _logger: Logger,
+    context: EvaluationContext,
+    logger: Logger,
   ): Promise<ResolutionDetails<string>> {
-    return Promise.resolve(this._notReady(flagKey, defaultValue));
+    return Promise.resolve(
+      this._evaluate(defaultValue, () =>
+        this._flagdCore.resolveStringEvaluation(flagKey, defaultValue, context, logger),
+      ),
+    );
   }
 
   resolveNumberEvaluation(
     flagKey: string,
     defaultValue: number,
-    _context: EvaluationContext,
-    _logger: Logger,
+    context: EvaluationContext,
+    logger: Logger,
   ): Promise<ResolutionDetails<number>> {
-    return Promise.resolve(this._notReady(flagKey, defaultValue));
+    return Promise.resolve(
+      this._evaluate(defaultValue, () =>
+        this._flagdCore.resolveNumberEvaluation(flagKey, defaultValue, context, logger),
+      ),
+    );
   }
 
   resolveObjectEvaluation<T extends JsonValue>(
     flagKey: string,
     defaultValue: T,
-    _context: EvaluationContext,
-    _logger: Logger,
+    context: EvaluationContext,
+    logger: Logger,
   ): Promise<ResolutionDetails<T>> {
-    return Promise.resolve(this._notReady(flagKey, defaultValue));
+    return Promise.resolve(
+      this._evaluate(defaultValue, () =>
+        this._flagdCore.resolveObjectEvaluation(flagKey, defaultValue, context, logger),
+      ),
+    );
   }
 
-  /** @internal Test hook. */
-  get initialized(): boolean {
-    return this._initialized;
+  /** @internal */
+  get state(): ProviderState {
+    return this._state;
   }
 
   /** @internal Test hook. */
@@ -77,8 +192,8 @@ export class DynatraceProvider implements Provider {
     return this._options.cdnUrl;
   }
 
-  private _notReady<T>(flagKey: string, defaultValue: T): ResolutionDetails<T> {
-    if (!this._initialized) {
+  private _evaluate<T>(defaultValue: T, fn: () => ResolutionDetails<T>): ResolutionDetails<T> {
+    if (!this._isEvaluating()) {
       return {
         value: defaultValue,
         reason: 'ERROR',
@@ -86,11 +201,62 @@ export class DynatraceProvider implements Provider {
         errorMessage: 'provider has not been initialized',
       };
     }
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: ErrorCode.FLAG_NOT_FOUND,
-      errorMessage: `flag '${flagKey}' not found`,
-    };
+    return fn();
+  }
+
+  private _isEvaluating(): boolean {
+    return this._state === 'READY' || this._state === 'STALE' || this._state === 'ERROR';
+  }
+
+  private _storeFlags(json: string): string[] {
+    if (this._shutdown) {
+      throw new Error('storeFlags called after provider shutdown');
+    }
+    return this._flagdCore.setConfigurations(json);
+  }
+
+  private _onFetchSuccess(): void {
+    this._cancelGraceTimer();
+    // NOT_READY is reachable: a failed init leaves the poller running, so the first good tick makes us usable.
+    if (this._state !== 'READY') {
+      this._state = 'READY';
+      this.events.emit(ProviderEvents.Ready, { message: 'recovered' });
+    }
+  }
+
+  private _onFetchFailure(reason: string): void {
+    if (this._state !== 'READY') {
+      return;
+    }
+    this._state = 'STALE';
+    this.events.emit(ProviderEvents.Stale, { message: reason });
+    this._startGraceTimer();
+  }
+
+  private _emitConfigurationChanged(changedKeys: string[]): void {
+    if (changedKeys.length === 0) {
+      return;
+    }
+    this.events.emit(ProviderEvents.ConfigurationChanged, { flagsChanged: changedKeys });
+  }
+
+  private _startGraceTimer(): void {
+    this._cancelGraceTimer();
+    this._graceTimer = setTimeout(() => this._graceExpired(), this._gracePeriodMs);
+  }
+
+  private _cancelGraceTimer(): void {
+    if (this._graceTimer != null) {
+      clearTimeout(this._graceTimer);
+      this._graceTimer = undefined;
+    }
+  }
+
+  private _graceExpired(): void {
+    if (this._state !== 'STALE') {
+      return;
+    }
+    this._state = 'ERROR';
+    this.events.emit(ProviderEvents.Error, { message: 'grace period expired; CDN unreachable' });
   }
 }
