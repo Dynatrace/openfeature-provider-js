@@ -1,6 +1,6 @@
 {
   "name": "@dynatrace/openfeature-provider-node",
-  "version": "0.0.1-alpha",
+  "version": "0.1.0-alpha",
   "description": "The official Dynatrace OpenFeature provider for Node.js (server-side).",
   "main": "./dist/cjs/index.js",
   "files": [
