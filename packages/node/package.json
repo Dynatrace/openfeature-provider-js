@@ -16,7 +16,7 @@
   },
   "types": "./dist/types.d.ts",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "keywords": [
     "OpenFeature",
