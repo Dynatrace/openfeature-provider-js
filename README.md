@@ -26,6 +26,16 @@ npm test
 npm run format
 ```
 
+### Running the e2e tests
+
+The node provider runs the shared Gherkin suite from the [`fm-provider-test-harness`](https://github.com/Dynatrace/fm-provider-test-harness) submodule against its mock server via Testcontainers, so Docker must be running.
+
+```bash
+npm run test:e2e
+```
+
+The script initializes the submodule. Set `MOCKSERVER_IMAGE` to run against a locally built mock server image.
+
 ## License
 
 Apache 2.0 — see [LICENSE](./LICENSE).

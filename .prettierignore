@@ -3,3 +3,4 @@ node_modules/
 **/.worktrees/
 package-lock.json
 **/CHANGELOG.md
+fm-provider-test-harness

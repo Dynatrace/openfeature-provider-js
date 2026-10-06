@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "vitest run",
+    "test:e2e": "npm run test:e2e -w packages/node",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "prepare": "husky"
@@ -40,12 +41,14 @@
     "@openfeature/web-sdk": "^1.8.0",
     "esbuild": "^0.25.0",
     "husky": "^9.1.7",
+    "jest-cucumber": "^4.5.0",
     "jsdom": "^29.1.1",
     "lint-staged": "^17.0.4",
     "prettier": "^3.8.3",
     "rollup": "^4.0.0",
     "rollup-plugin-dts": "^6.1.1",
     "shx": "^0.4.0",
+    "testcontainers": "^12.2.0",
     "typescript": "^5.4.0",
     "vitest": "^4.0.0"
   }
