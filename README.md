@@ -34,7 +34,7 @@ The node provider runs the shared Gherkin suite from the [`fm-provider-test-harn
 npm run test:e2e
 ```
 
-The script initializes the submodule. Set `SKIP_HARNESS_UPDATE=1` to keep a local harness checkout, and `MOCKSERVER_IMAGE` to run against a locally built mock server image.
+The script initializes the submodule and runs the suite with cucumber-js. Set `SKIP_HARNESS_UPDATE=1` to keep a local harness checkout, and `MOCKSERVER_IMAGE` to run against a locally built mock server image.
 
 ## License
 

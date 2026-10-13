@@ -48,7 +48,7 @@
     "build": "npm run clean && npm run build:esm && npm run build:cjs && npm run build:types && npm run build:rollup-types",
     "postbuild": "shx cp ../../package.esm.json ./dist/esm/package.json && shx cp ../../package.cjs.json ./dist/cjs/package.json",
     "test": "vitest run",
-    "test:e2e": "([ -n \"$SKIP_HARNESS_UPDATE\" ] || git -C ../.. submodule update --init fm-provider-test-harness) && vitest run --config vitest.e2e.config.ts",
+    "test:e2e": "([ -n \"$SKIP_HARNESS_UPDATE\" ] || git -C ../.. submodule update --init fm-provider-test-harness) && NODE_OPTIONS=--import=tsx cucumber-js",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json"
   },
   "dependencies": {
