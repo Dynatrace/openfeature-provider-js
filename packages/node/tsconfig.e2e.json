@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ES2022"
+  },
+  "include": ["./e2e/**/*", "./src/**/*", "../shared/src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "./src/**/*.test.ts", "../shared/src/**/*.test.ts"]
+}
