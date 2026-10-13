@@ -365,12 +365,15 @@ async function assertHoldsFor(
   message: () => string | Promise<string>,
 ): Promise<void> {
   const deadline = Date.now() + durationMs;
-  do {
+  while (Date.now() < deadline) {
     if (!(await condition())) {
       expect.fail(await message());
     }
     await sleep(HOLD_CHECK_STEP_MS);
-  } while (Date.now() < deadline);
+  }
+  if (!(await condition())) {
+    expect.fail(await message());
+  }
 }
 
 /** Sleeps until the given epoch millis; returns immediately if that has passed. */

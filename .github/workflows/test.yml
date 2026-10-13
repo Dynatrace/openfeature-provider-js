@@ -49,5 +49,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Type check e2e tests
+        run: npm run typecheck:e2e -w packages/node
+
       - name: Run e2e tests
         run: npm run test:e2e
