@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.1-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.3.0-alpha...openfeature-provider-web-v0.3.1-alpha) (2026-10-13)
+
+
+### 🐛 Bug Fixes
+
+* expose ./package.json in package exports ([#40](https://github.com/Dynatrace/openfeature-provider-js/issues/40)) ([afae7b9](https://github.com/Dynatrace/openfeature-provider-js/commit/afae7b923ebb8523e7089b6c231fc087cc8a5435))
+
+
+### 📚 Documentation
+
+* align READMEs with the standard provider format ([#32](https://github.com/Dynatrace/openfeature-provider-js/issues/32)) ([b7b8bfc](https://github.com/Dynatrace/openfeature-provider-js/commit/b7b8bfc7c1d5959a1d99ddbc02761c429f625760))
+
 ## [0.3.0-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.7-alpha...openfeature-provider-web-v0.3.0-alpha) (2026-08-27)
 
 
