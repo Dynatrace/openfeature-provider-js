@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-node-v0.1.0-alpha...openfeature-provider-node-v0.1.1-alpha) (2026-10-13)
+
+
+### 🐛 Bug Fixes
+
+* expose ./package.json in package exports ([#40](https://github.com/Dynatrace/openfeature-provider-js/issues/40)) ([afae7b9](https://github.com/Dynatrace/openfeature-provider-js/commit/afae7b923ebb8523e7089b6c231fc087cc8a5435))
+
 ## [0.1.0-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-node-v0.0.1-alpha...openfeature-provider-node-v0.1.0-alpha) (2026-09-25)
 
 
