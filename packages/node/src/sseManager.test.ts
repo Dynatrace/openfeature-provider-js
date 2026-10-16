@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { SseManager, maskSseUrl, type SseEventSource } from './sseManager';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { SseManager, maskSseUrl, reconnectingFetch, type SseEventSource } from './sseManager';
 import { FakeEventSource } from './testFixtures';
 
 const URL_WITH_KEY = 'https://sse.us.fm.dynatrace.com/event-stream?v=1.2&key=SECRET&channels=dt01.server_us_x';
@@ -104,5 +104,31 @@ describe('SseManager', () => {
     manager.stop();
 
     expect(factory).toHaveBeenCalledOnce();
+  });
+});
+
+describe('reconnectingFetch', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('passes a 200 through untouched', async () => {
+    const response = new Response('', { status: 200 });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response),
+    );
+
+    expect(await reconnectingFetch('https://sse.example.com', {} as never)).toBe(response);
+  });
+
+  it('rejects a non-2xx answer so the EventSource reconnects instead of closing', async () => {
+    const response = new Response('unavailable', { status: 503 });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response),
+    );
+
+    await expect(reconnectingFetch('https://sse.example.com', {} as never)).rejects.toThrow('HTTP 503');
   });
 });

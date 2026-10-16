@@ -1,5 +1,5 @@
 import type { Logger } from '@openfeature/server-sdk';
-import { EventSource } from 'eventsource';
+import { EventSource, type FetchLike } from 'eventsource';
 import { resolveLogger } from '../../shared/src/logger.js';
 import { parseSseMessage, type SseMessage } from '../../shared/src/sse/sseMessage.js';
 
@@ -13,8 +13,22 @@ export interface SseEventSource {
 
 export type EventSourceFactory = (url: string) => SseEventSource;
 
+/**
+ * Rejects a non-2xx answer so the EventSource retries it like a network error. Per WHATWG it would
+ * otherwise close for good on e.g. a 503, and the provider would never get SSE back.
+ */
+export const reconnectingFetch: FetchLike = async (url, init) => {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`SSE endpoint answered HTTP ${response.status}`);
+  }
+  return response;
+};
+
 // The cast bridges the handler variance between this structural type and the concrete class.
-export const defaultEventSourceFactory: EventSourceFactory = (url) => new EventSource(url) as SseEventSource;
+export const defaultEventSourceFactory: EventSourceFactory = (url) =>
+  new EventSource(url, { fetch: reconnectingFetch }) as SseEventSource;
 
 export interface SseCallbacks {
   onConnected: () => void;

@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "vitest run",
+    "test:e2e": "npm run test:e2e -w packages/node",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "prepare": "husky"
@@ -35,6 +36,7 @@
     "packages/*"
   ],
   "devDependencies": {
+    "@cucumber/cucumber": "^13.3.0",
     "@openfeature/core": "^1.11.0",
     "@openfeature/server-sdk": "^1.22.0",
     "@openfeature/web-sdk": "^1.8.0",
@@ -46,6 +48,8 @@
     "rollup": "^4.0.0",
     "rollup-plugin-dts": "^6.1.1",
     "shx": "^0.4.0",
+    "testcontainers": "^12.2.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.4.0",
     "vitest": "^4.0.0"
   }

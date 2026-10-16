@@ -597,18 +597,21 @@ describe('DynatraceProvider SSE', () => {
     await provider.onClose();
   });
 
-  it('ignores a message announcing a config no newer than the one in force', async () => {
-    const { provider, sources } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_2 }, { status: 304 }]);
+  it('re-fetches even for a message announcing a config no newer than the one in force', async () => {
+    const { provider, sources, fetch } = createSseProvider([
+      { body: flagJsonWithSse(), lastModified: LM_2 },
+      { status: 304 },
+    ]);
     await provider.initialize();
     sources[0].onopen?.({});
+    await vi.advanceTimersByTimeAsync(0);
+    const callsBefore = (fetch as any).mock.calls.length;
 
-    const onChanged = vi.fn();
-    provider.events.addHandler(ProviderEvents.ConfigurationChanged, onChanged);
-    // LM_1 is older than the LM_2 config already applied.
+    // LM_1 is older than the LM_2 config already applied
     sources[0].onmessage?.({ data: JSON.stringify({ type: 'refetchConfig', lastModified: Date.parse(LM_1) / 1000 }) });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(onChanged).not.toHaveBeenCalled();
+    expect((fetch as any).mock.calls.length).toBe(callsBefore + 1);
     await provider.onClose();
   });
 

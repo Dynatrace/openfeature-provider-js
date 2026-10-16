@@ -446,13 +446,8 @@ export class DynatraceProvider implements Provider {
       return;
     }
 
-    // providers.md 1.4: rapid writes can arrive out of order, so drop anything not newer.
+    // never dropped up front: second-precision timestamps can tie, and the conditional GET is cheap
     const announcedMs = message.lastModified != null ? message.lastModified * 1_000 : undefined;
-    if (announcedMs != null && !this._fetcher.isNewerThanCommitted(announcedMs)) {
-      this._logger.debug('ignoring SSE message: it announces a config no newer than the one in force');
-      return;
-    }
-
     this._pollingManager?.requestSseRefetch(announcedMs);
   }
 

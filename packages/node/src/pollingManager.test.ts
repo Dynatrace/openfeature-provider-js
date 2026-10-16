@@ -389,6 +389,58 @@ describe('PollingManager SSE re-fetch', () => {
     manager.stop();
   });
 
+  it('never drops a deferred re-fetch whose announcement carried no lastModified', async () => {
+    let settle: (value: FetchResult) => void;
+    const fetchFlags = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<FetchResult>((resolve) => {
+            settle = resolve;
+          }),
+      )
+      .mockResolvedValue({ status: 304, body: null, etag: null, lastModified: null });
+    const isNewerThanApplied = vi.fn((lastModifiedMs: number) => lastModifiedMs === Number.POSITIVE_INFINITY);
+    const callbacks = makeCallbacks({ fetchFlags, isNewerThanApplied });
+    const manager = new PollingManager(callbacks, 10_000);
+    manager.start();
+
+    manager.requestSseRefetch();
+    await vi.advanceTimersByTimeAsync(0);
+    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
+    manager.requestSseRefetch();
+
+    settle!({ status: 200, body: '{}', etag: null, lastModified: 'Wed, 01 Jan 2025 00:00:30 GMT' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    // the unknown announcement outranks the dated one, so the re-fetch still runs
+    expect(fetchFlags).toHaveBeenCalledTimes(2);
+    manager.stop();
+  });
+
+  it('keeps a rate-limited re-fetch pending until a fetch reaches the CDN', async () => {
+    const rateLimited: FetchResult = { status: 429, body: null, etag: null, lastModified: null };
+    const notModified: FetchResult = { status: 304, body: null, etag: null, lastModified: null };
+    const fetchFlags = vi
+      .fn()
+      .mockResolvedValueOnce(rateLimited)
+      .mockResolvedValueOnce(notModified)
+      .mockResolvedValue(notModified);
+    const callbacks = makeCallbacks({ fetchFlags });
+    const manager = new PollingManager(callbacks, 1_000);
+    manager.start();
+
+    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // the tick reaches the CDN, then the pending re-fetch is issued behind it
+    expect(fetchFlags).toHaveBeenCalledTimes(3);
+    manager.stop();
+  });
+
   it('ignores a re-fetch requested after stop', async () => {
     const callbacks = makeCallbacks();
     const manager = new PollingManager(callbacks, 10_000);

@@ -9,6 +9,9 @@ export const DEFAULT_POLL_INTERVAL_MS = 10_000;
 /** Cadence while SSE is connected: notifications carry the changes, polling is a safety net. */
 export const SSE_CONNECTED_POLL_INTERVAL_MS = 600_000;
 
+/** Stands in for an SSE announcement without a `lastModified`, so it is never coalesced away or dropped. */
+const LAST_MODIFIED_UNKNOWN = Number.POSITIVE_INFINITY;
+
 export interface PollingCallbacks {
   fetchFlags: (signal: AbortSignal) => Promise<FetchResult>;
   storeFlags: (body: string) => string[];
@@ -39,10 +42,13 @@ export class PollingManager {
   private _intervalMs: number;
 
   /**
-   * The SSE re-fetch waiting for the in-flight fetch to finish, holding the greatest `lastModified`
-   * announced by the messages coalesced into it; they can arrive out of order.
+   * The SSE re-fetch waiting for the slot to free, as the greatest `lastModified` announced by the
+   * messages coalesced into it; they can arrive out of order.
    */
-  private _pendingSseRefetch: { lastModifiedMs?: number } | undefined;
+  private _pendingSseRefetchMs: number | undefined;
+
+  /** Announcement the running fetch was issued for; undefined for a poll tick. */
+  private _inFlightSseRefetchMs: number | undefined;
 
   private readonly _logger: Logger;
 
@@ -73,7 +79,8 @@ export class PollingManager {
     this._abortController?.abort();
     this._abortController = undefined;
     this._clearTimer();
-    this._pendingSseRefetch = undefined;
+    this._pendingSseRefetchMs = undefined;
+    this._inFlightSseRefetchMs = undefined;
   }
 
   /**
@@ -102,16 +109,18 @@ export class PollingManager {
       return;
     }
 
+    const announcedMs = lastModifiedMs ?? LAST_MODIFIED_UNKNOWN;
     if (this._inFlight) {
-      const pendingMs = this._pendingSseRefetch?.lastModifiedMs;
-      this._pendingSseRefetch = {
-        lastModifiedMs: lastModifiedMs == null ? pendingMs : Math.max(pendingMs ?? 0, lastModifiedMs),
-      };
+      this._deferSseRefetch(announcedMs);
       this._logger.debug('SSE re-fetch deferred: a fetch is already in flight');
       return;
     }
 
-    this._runPoll();
+    this._runPoll(announcedMs);
+  }
+
+  private _deferSseRefetch(announcedMs: number): void {
+    this._pendingSseRefetchMs = Math.max(this._pendingSseRefetchMs ?? announcedMs, announcedMs);
   }
 
   private _startTimer(): void {
@@ -125,7 +134,8 @@ export class PollingManager {
     }
   }
 
-  private _runPoll(): void {
+  /** @param sseRefetchMs announcement this fetch is issued for; omitted for a poll tick */
+  private _runPoll(sseRefetchMs?: number): void {
     if (this._stopped || this._inFlight) {
       return;
     }
@@ -133,10 +143,12 @@ export class PollingManager {
     const abortController = new AbortController();
     this._abortController = abortController;
     this._inFlight = true;
+    this._inFlightSseRefetchMs = sseRefetchMs;
     void this._poll(abortController.signal);
   }
 
   private async _poll(signal: AbortSignal): Promise<void> {
+    let rateLimited = false;
     try {
       const result = await this._callbacks.fetchFlags(signal);
 
@@ -152,6 +164,7 @@ export class PollingManager {
 
       if (isRateLimited(result)) {
         this._logger.debug('rate limited; serving cached values');
+        rateLimited = true;
         return;
       }
 
@@ -184,26 +197,40 @@ export class PollingManager {
       this._logger.warn(`poll failed: ${message}`);
       this._callbacks.emitFailure(message);
     } finally {
+      const issuedForMs = this._inFlightSseRefetchMs;
+      this._inFlightSseRefetchMs = undefined;
       this._inFlight = false;
-      this._drainPendingSseRefetch();
+      if (rateLimited) {
+        // the CDN never answered this re-fetch; keep it pending for the first fetch after the window
+        this._keepSseRefetchPending(issuedForMs);
+      } else {
+        this._drainPendingSseRefetch();
+      }
     }
+  }
+
+  private _keepSseRefetchPending(issuedForMs: number | undefined): void {
+    if (issuedForMs == null || this._stopped) {
+      return;
+    }
+    this._deferSseRefetch(issuedForMs);
+    this._logger.debug('SSE re-fetch rate limited; keeping it pending');
   }
 
   /** Issues the deferred SSE re-fetch, unless the finished fetch already satisfied it. */
   private _drainPendingSseRefetch(): void {
-    if (this._pendingSseRefetch == null || this._stopped) {
+    const announcedMs = this._pendingSseRefetchMs;
+    if (announcedMs == null || this._stopped) {
       return;
     }
+    this._pendingSseRefetchMs = undefined;
 
-    const announcedMs = this._pendingSseRefetch.lastModifiedMs;
-    this._pendingSseRefetch = undefined;
-
-    if (announcedMs != null && !this._callbacks.isNewerThanApplied(announcedMs)) {
+    if (!this._callbacks.isNewerThanApplied(announcedMs)) {
       this._logger.debug('deferred SSE re-fetch dropped: the completed fetch already returned that config');
       return;
     }
 
     this._logger.debug('issuing deferred SSE re-fetch');
-    this._runPoll();
+    this._runPoll(announcedMs);
   }
 }
