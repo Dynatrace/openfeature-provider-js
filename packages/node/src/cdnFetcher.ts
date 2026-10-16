@@ -72,6 +72,15 @@ export class CdnFetcher {
   }
 
   /**
+   * Whether the given `Last-Modified`, in epoch milliseconds, is newer than the config in force.
+   * True when either side is unknown, so an un-dated config never suppresses a fetch.
+   */
+  isNewerThanCommitted(lastModifiedMs: number | null | undefined): boolean {
+    const committedMs = this._state.lastModifiedAt?.getTime();
+    return lastModifiedMs == null || committedMs == null || lastModifiedMs > committedMs;
+  }
+
+  /**
    * Drops the cached validators so the next fetch performs an unconditional GET.
    *
    * A provider that is closed and registered again starts a fresh lifecycle and expects a
@@ -154,11 +163,7 @@ export class CdnFetcher {
 
     if (status >= 200 && status < 300) {
       const newLastModifiedAt = newLastModified != null ? parseHttpDate(newLastModified) : null;
-      if (
-        newLastModifiedAt != null &&
-        this._state.lastModifiedAt != null &&
-        newLastModifiedAt.getTime() <= this._state.lastModifiedAt.getTime()
-      ) {
+      if (newLastModifiedAt != null && !this.isNewerThanCommitted(newLastModifiedAt.getTime())) {
         // Stale-node defense: the CDN served a body older than what we already hold.
         // This is a real answer from the CDN, so it counts as a
         // successful poll exactly like a 304 (see fm-provider-test-harness cdn.feature,

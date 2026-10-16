@@ -11,6 +11,8 @@ const CONTAINER_STARTUP_TIMEOUT_MS = 60_000;
 const CONTROL_REQUEST_TIMEOUT_MS = 10_000;
 /** HTTP status the mock CDN serves a flag configuration with, and the health check answers with */
 export const HTTP_OK = 200;
+/** the only path the mock server serves an SSE stream on */
+export const SSE_PATH = '/sse';
 
 /** Test harness submodule at the repo root. */
 export const HARNESS_DIR = new URL('../../../fm-provider-test-harness/', import.meta.url);
@@ -76,6 +78,28 @@ export class MockServer {
   /** Counts the CDN requests received since the last reset. */
   async countCdnRequests(): Promise<number> {
     return (await this.fetchCdnRequests()).length;
+  }
+
+  /** Counts the SSE subscribers currently connected. */
+  async countSseClients(): Promise<number> {
+    return (JSON.parse(await this.sendControlRequest('GET', '/__control__/sse/clients')) as { clients: number })
+      .clients;
+  }
+
+  /** Drops every SSE subscriber and refuses new connections for outageMs, or until restoreSse or reset when omitted. */
+  async dropSse(outageMs?: number): Promise<void> {
+    const body = outageMs === undefined ? undefined : JSON.stringify({ reconnectSeconds: outageMs / 1_000 });
+    await this.sendControlRequest('POST', '/__control__/sse/disconnect', body);
+  }
+
+  /** Ends an outage opened by dropSse, so the next reconnect attempt succeeds. */
+  async restoreSse(): Promise<void> {
+    await this.sendControlRequest('POST', '/__control__/sse/disconnect', JSON.stringify({ reconnectSeconds: 0 }));
+  }
+
+  /** Broadcasts payload as the data line of an SSE event to every connected subscriber. */
+  async emitSse(payload: string): Promise<void> {
+    await this.sendControlRequest('POST', '/__control__/sse/emit', payload);
   }
 
   /** Sends one control API call and returns its body, failing on a non-2xx answer. */

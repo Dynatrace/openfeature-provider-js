@@ -2,7 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LOG_PREFIX } from '../../shared/src/logger';
 import { ProviderEvents } from '@openfeature/server-sdk';
 import { DynatraceProvider } from './DynatraceProvider';
-import { TEST_FLAG_JSON, VALID_SERVER_KEY } from './testFixtures';
+import {
+  TEST_FLAG_JSON,
+  VALID_SERVER_KEY,
+  SSE_URL,
+  ROTATED_SSE_URL,
+  flagJsonWithSse,
+  createCdnFetch,
+  FakeEventSource,
+  type CdnResponse,
+} from './testFixtures';
 
 const logger = {} as any;
 
@@ -468,6 +477,251 @@ describe('DynatraceProvider', () => {
     // _startPolling runs on the failed-init recovery path, and that is what must start the flusher
     expect(flusher.start).toHaveBeenCalled();
 
+    await provider.onClose();
+  });
+});
+
+const LM_1 = 'Wed, 01 Jan 2025 00:00:00 GMT';
+const LM_2 = 'Wed, 01 Jan 2025 00:01:00 GMT';
+
+function createSseProvider(
+  responses: CdnResponse[],
+  options: { disableSse?: boolean } = {},
+  internals: Record<string, unknown> = {},
+) {
+  const sources: FakeEventSource[] = [];
+  const urls: string[] = [];
+  const eventSourceFactory = vi.fn((url: string) => {
+    urls.push(url);
+    const source = new FakeEventSource();
+    sources.push(source);
+    return source;
+  });
+  const fetchMock = createCdnFetch(responses);
+  const provider = new DynatraceProvider(VALID_SERVER_KEY, options, {
+    fetch: fetchMock,
+    eventSourceFactory,
+    pollIntervalMs: 100,
+    pollIntervalSseConnectedMs: 10_000,
+    sseDisconnectDebounceMs: 500,
+    ...internals,
+  } as any);
+  return { provider, sources, urls, eventSourceFactory, fetch: internals.fetch ?? fetchMock };
+}
+
+describe('DynatraceProvider SSE', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('opens the stream the config advertises and relaxes the poll cadence on connect', async () => {
+    const { provider, sources, urls } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_1 }]);
+
+    await provider.initialize();
+    expect(urls).toEqual([SSE_URL]);
+
+    sources[0].onopen?.({});
+    // The relaxed cadence is 10s here, so the 100ms disconnected tick no longer fires.
+    await vi.advanceTimersByTimeAsync(500);
+    expect(provider.state).toBe('READY');
+
+    await provider.onClose();
+    expect(sources[0].closed).toBe(true);
+  });
+
+  it('runs polling-only when the config advertises no stream', async () => {
+    const { provider, eventSourceFactory } = createSseProvider([{ body: TEST_FLAG_JSON, lastModified: LM_1 }]);
+
+    await provider.initialize();
+
+    expect(eventSourceFactory).not.toHaveBeenCalled();
+    await provider.onClose();
+  });
+
+  it('runs polling-only when SSE is disabled', async () => {
+    const { provider, eventSourceFactory } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_1 }], {
+      disableSse: true,
+    });
+
+    await provider.initialize();
+
+    expect(eventSourceFactory).not.toHaveBeenCalled();
+    await provider.onClose();
+  });
+
+  it('re-fetches on refetchConfig and emits the changed keys', async () => {
+    const base = JSON.parse(flagJsonWithSse());
+    const changed = JSON.stringify({
+      ...base,
+      metadata: { version: '1741780801' },
+      flags: { ...base.flags, 'my-bool': { ...base.flags['my-bool'], defaultVariant: 'off' } },
+    });
+    const { provider, sources } = createSseProvider([
+      { body: flagJsonWithSse(), lastModified: LM_1 },
+      { body: changed, lastModified: LM_2 },
+    ]);
+    await provider.initialize();
+    sources[0].onopen?.({});
+
+    const onChanged = vi.fn();
+    provider.events.addHandler(ProviderEvents.ConfigurationChanged, onChanged);
+
+    sources[0].onmessage?.({ data: JSON.stringify({ type: 'refetchConfig', lastModified: 1_735_689_660 }) });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(onChanged).toHaveBeenCalledOnce();
+    expect(onChanged.mock.calls[0][0].flagsChanged).toContain('my-bool');
+    const result = await provider.resolveBooleanEvaluation('my-bool', true, { targetingKey: 'u1' }, logger);
+    expect(result.value).toBe(false);
+
+    await provider.onClose();
+  });
+
+  it('ignores a message type it does not handle', async () => {
+    const { provider, sources, fetch } = createSseProvider([
+      { body: flagJsonWithSse(), lastModified: LM_1 },
+      { status: 304 },
+    ]);
+    await provider.initialize();
+    sources[0].onopen?.({});
+    const callsBefore = (fetch as any).mock.calls.length;
+
+    sources[0].onmessage?.({ data: JSON.stringify({ type: 'refetchEvaluation' }) });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect((fetch as any).mock.calls.length).toBe(callsBefore);
+    await provider.onClose();
+  });
+
+  it('re-fetches even for a message announcing a config no newer than the one in force', async () => {
+    const { provider, sources, fetch } = createSseProvider([
+      { body: flagJsonWithSse(), lastModified: LM_2 },
+      { status: 304 },
+    ]);
+    await provider.initialize();
+    sources[0].onopen?.({});
+    await vi.advanceTimersByTimeAsync(0);
+    const callsBefore = (fetch as any).mock.calls.length;
+
+    // LM_1 is older than the LM_2 config already applied
+    sources[0].onmessage?.({ data: JSON.stringify({ type: 'refetchConfig', lastModified: Date.parse(LM_1) / 1000 }) });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect((fetch as any).mock.calls.length).toBe(callsBefore + 1);
+    await provider.onClose();
+  });
+
+  it('stays READY through a blip that reconnects inside the debounce window', async () => {
+    const { provider, sources } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_1 }, { status: 304 }]);
+    await provider.initialize();
+    sources[0].onopen?.({});
+
+    const onStale = vi.fn();
+    provider.events.addHandler(ProviderEvents.Stale, onStale);
+
+    sources[0].onerror?.({ message: 'socket hang up' });
+    await vi.advanceTimersByTimeAsync(400);
+    sources[0].onopen?.({});
+    await vi.advanceTimersByTimeAsync(400);
+
+    expect(onStale).not.toHaveBeenCalled();
+    expect(provider.state).toBe('READY');
+    await provider.onClose();
+  });
+
+  it('goes STALE when a fault outlives the debounce window', async () => {
+    const { provider, sources } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_1 }, { status: 304 }]);
+    await provider.initialize();
+    sources[0].onopen?.({});
+
+    const onStale = vi.fn();
+    provider.events.addHandler(ProviderEvents.Stale, onStale);
+
+    sources[0].onerror?.({ message: 'socket hang up' });
+    sources[0].onerror?.({ message: 'socket hang up' });
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(provider.state).toBe('STALE');
+    expect(onStale).toHaveBeenCalledOnce();
+    await provider.onClose();
+  });
+
+  it('recovers to READY on the first good poll after a disconnect', async () => {
+    const { provider, sources } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_1 }, { status: 304 }]);
+    await provider.initialize();
+    sources[0].onopen?.({});
+
+    sources[0].onerror?.({ message: 'gone' });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(provider.state).toBe('STALE');
+
+    // The tightened 100ms cadence is what brings it back.
+    await vi.advanceTimersByTimeAsync(100);
+    expect(provider.state).toBe('READY');
+    await provider.onClose();
+  });
+
+  it('stays READY when a poll fails while the stream is healthy', async () => {
+    const { provider, sources } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_1 }, { status: 500 }]);
+    await provider.initialize();
+    sources[0].onopen?.({});
+
+    const onStale = vi.fn();
+    provider.events.addHandler(ProviderEvents.Stale, onStale);
+
+    sources[0].onmessage?.({ data: JSON.stringify({ type: 'refetchConfig' }) });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(provider.state).toBe('READY');
+    expect(onStale).not.toHaveBeenCalled();
+    await provider.onClose();
+  });
+
+  it('reconnects to the new URL when the config rotates the stream', async () => {
+    const { provider, sources, urls } = createSseProvider([
+      { body: flagJsonWithSse(SSE_URL), lastModified: LM_1 },
+      { body: flagJsonWithSse(ROTATED_SSE_URL, '1741780801'), lastModified: LM_2 },
+    ]);
+    await provider.initialize();
+    sources[0].onopen?.({});
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(urls).toEqual([SSE_URL, ROTATED_SSE_URL]);
+    expect(sources[0].closed).toBe(true);
+    expect(sources[1].closed).toBe(false);
+    await provider.onClose();
+  });
+
+  it('keeps the connection when the config re-advertises the same URL', async () => {
+    const { provider, sources, urls } = createSseProvider([
+      { body: flagJsonWithSse(SSE_URL), lastModified: LM_1 },
+      { body: flagJsonWithSse(SSE_URL, '1741780801'), lastModified: LM_2 },
+    ]);
+    await provider.initialize();
+    sources[0].onopen?.({});
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(urls).toEqual([SSE_URL]);
+    expect(sources[0].closed).toBe(false);
+    await provider.onClose();
+  });
+
+  it('drops the previous lifecycle stream when re-initialized', async () => {
+    const { provider, sources, urls } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_1 }]);
+    await provider.initialize();
+    sources[0].onopen?.({});
+
+    await provider.onClose();
+    await provider.initialize();
+
+    expect(urls).toEqual([SSE_URL, SSE_URL]);
+    expect(sources[0].closed).toBe(true);
     await provider.onClose();
   });
 });
