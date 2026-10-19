@@ -244,7 +244,7 @@ describe('PollingManager cadence switching', () => {
     const manager = new PollingManager(callbacks, 1_000);
     manager.start();
 
-    // 900ms into a 1000ms interval, drop to 100ms: the next poll is 100ms from now.
+    // 900ms into a 1000ms interval, drop to 100ms: next poll is 100ms out
     await vi.advanceTimersByTimeAsync(900);
     expect(callbacks.fetchFlags).not.toHaveBeenCalled();
 
@@ -300,12 +300,12 @@ describe('PollingManager SSE re-fetch', () => {
     manager.requestSseRefetch();
     await vi.advanceTimersByTimeAsync(100);
 
-    // The out-of-band fetch plus the tick that was already due: the ticker was not re-anchored.
+    // out-of-band fetch plus the tick already due; ticker not re-anchored
     expect(callbacks.fetchFlags).toHaveBeenCalledTimes(2);
     manager.stop();
   });
 
-  it('defers a re-fetch that lands while a fetch is running, then issues it', async () => {
+  it('defers a re-fetch that arrives while a fetch is running, then issues it', async () => {
     let settle: (value: FetchResult) => void;
     const fetchFlags = vi
       .fn()
@@ -329,7 +329,7 @@ describe('PollingManager SSE re-fetch', () => {
     settle!({ status: 304, body: null, etag: null, lastModified: null });
     await vi.advanceTimersByTimeAsync(0);
 
-    // The config in force is still older than the announced one, so the deferred re-fetch runs.
+    // config in force still older than announced, so the deferred re-fetch runs
     expect(fetchFlags).toHaveBeenCalledTimes(2);
     manager.stop();
   });
@@ -376,14 +376,14 @@ describe('PollingManager SSE re-fetch', () => {
     manager.requestSseRefetch();
     await vi.advanceTimersByTimeAsync(0);
 
-    // Out-of-order notifications: the newest is announced first.
+    // out of order: newest announced first
     manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
     manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:10 GMT'));
 
     settle!({ status: 200, body: '{}', etag: null, lastModified: 'Wed, 01 Jan 2025 00:00:20 GMT' });
     await vi.advanceTimersByTimeAsync(0);
 
-    // Only the greatest announcement is carried forward, and it drives a single re-fetch.
+    // only the greatest announcement carries forward, driving one re-fetch
     expect(callbacks.isNewerThanApplied).toHaveBeenCalledExactlyOnceWith(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
     expect(fetchFlags).toHaveBeenCalledTimes(2);
     manager.stop();

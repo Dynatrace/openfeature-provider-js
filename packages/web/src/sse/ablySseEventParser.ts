@@ -20,5 +20,5 @@ import { unwrapSseData } from '../../../shared/src/sse/sseMessage.js';
  */
 export function parseAblySseEvent(event: MessageEvent<string>): EventStreamMessage {
   const inner = unwrapSseData(event.data);
-  return defaultSseEventParser(inner == null ? event : ({ data: inner } as MessageEvent));
+  return defaultSseEventParser(inner ? ({ data: inner } as MessageEvent) : event);
 }

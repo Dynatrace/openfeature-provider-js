@@ -1,6 +1,6 @@
 import { safeJsonParse } from '../../../shared/src/sse/sseMessage.js';
 
-/** `eventStreams[].type` value identifying the SSE change-notification stream. */
+/** `eventStreams[].type` of the SSE stream */
 const STREAM_TYPE_SSE = 'sse';
 
 interface Endpoint {
@@ -14,32 +14,28 @@ interface EventStream {
   endpoint?: unknown;
 }
 
-/**
- * Resolves the SSE URL from the config's first `sse` entry in `eventStreams`, or `null`.
- * A flat `url` wins; otherwise `endpoint.requestUri` is appended to `endpoint.origin`, or to
- * `fallbackOrigin` when the entry omits one. Unknown attributes are ignored.
- */
-export function sseUrlFrom(configJson: string, fallbackOrigin?: string): string | null {
+/** first `sse` entry's `url`, else `endpoint.origin` (or `fallbackOrigin`) + `requestUri` */
+export function extractSseUrl(configJson: string, fallbackOrigin?: string): string | undefined {
   const streams = (safeJsonParse(configJson) as { eventStreams?: unknown } | undefined)?.eventStreams;
   if (!Array.isArray(streams)) {
-    return null;
+    return undefined;
   }
 
-  // Only the first `sse` entry counts, even when it turns out to be unusable.
+  // only the first `sse` entry counts, even if unusable
   const entry = (streams as EventStream[]).find((candidate) => candidate?.type === STREAM_TYPE_SSE);
-  if (entry == null) {
-    return null;
+  if (!entry) {
+    return undefined;
   }
   if (isNonBlank(entry.url)) {
     return entry.url.trim();
   }
 
   const endpoint = entry.endpoint as Endpoint | undefined;
-  if (endpoint == null || !isNonBlank(endpoint.requestUri)) {
-    return null;
+  if (!endpoint || !isNonBlank(endpoint.requestUri)) {
+    return undefined;
   }
   const origin = isNonBlank(endpoint.origin) ? endpoint.origin.trim() : fallbackOrigin;
-  return isNonBlank(origin) ? origin.trim() + endpoint.requestUri.trim() : null;
+  return isNonBlank(origin) ? origin.trim() + endpoint.requestUri.trim() : undefined;
 }
 
 function isNonBlank(value: unknown): value is string {

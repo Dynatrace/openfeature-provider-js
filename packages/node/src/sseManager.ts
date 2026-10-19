@@ -3,7 +3,7 @@ import { EventSource, type FetchLike } from 'eventsource';
 import { resolveLogger } from '../../shared/src/logger.js';
 import { parseSseMessage, type SseMessage } from '../../shared/src/sse/sseMessage.js';
 
-/** The slice of `EventSource` the manager uses, so tests and hosts can substitute one. */
+/** slice of `EventSource` the manager uses; substitutable in tests */
 export interface SseEventSource {
   onopen: ((event: unknown) => void) | null;
   onmessage: ((event: { data: string }) => void) | null;
@@ -13,10 +13,7 @@ export interface SseEventSource {
 
 export type EventSourceFactory = (url: string) => SseEventSource;
 
-/**
- * Rejects a non-2xx answer so the EventSource retries it like a network error. Per WHATWG it would
- * otherwise close for good on e.g. a 503, and the provider would never get SSE back.
- */
+/** throws on non-2xx so EventSource retries rather than closing for good (WHATWG) */
 export const reconnectingFetch: FetchLike = async (url, init) => {
   const response = await fetch(url, init);
   if (!response.ok) {
@@ -26,7 +23,7 @@ export const reconnectingFetch: FetchLike = async (url, init) => {
   return response;
 };
 
-// The cast bridges the handler variance between this structural type and the concrete class.
+// bridges handler variance between the structural type and the class
 export const defaultEventSourceFactory: EventSourceFactory = (url) =>
   new EventSource(url, { fetch: reconnectingFetch }) as SseEventSource;
 
@@ -36,18 +33,13 @@ export interface SseCallbacks {
   onMessage: (message: SseMessage) => void;
 }
 
-/** Strips the query string before logging: it carries the Ably channel key. */
+/** strips the query string, which carries the Ably key */
 export function maskSseUrl(url: string): string {
   const queryStart = url.indexOf('?');
   return queryStart >= 0 ? `${url.slice(0, queryStart)}?<redacted>` : url;
 }
 
-/**
- * Holds the SSE connection that notifies the provider when its config changes.
- *
- * Reconnection is the EventSource's job (providers.md 2.5), so faults are reported verbatim and
- * the provider decides whether one is worth going STALE over.
- */
+/** SSE change-notification stream; reconnects are left to EventSource (providers.md 2.4) */
 export class SseManager {
   private _source: SseEventSource | undefined;
   private _stopped = false;
@@ -65,13 +57,13 @@ export class SseManager {
     this._maskedUrl = maskSseUrl(_url);
   }
 
-  /** The stream URL this manager was built for; the provider compares it to spot a rotation. */
+  /** compared by the provider to spot a rotation */
   get url(): string {
     return this._url;
   }
 
   start(): void {
-    if (this._stopped || this._source != null) {
+    if (this._stopped || this._source) {
       return;
     }
 
@@ -85,29 +77,28 @@ export class SseManager {
 
     source.onmessage = (event) => {
       const message = parseSseMessage(event?.data);
-      if (message == null) {
+      if (!message) {
         this._logger.debug('SSE message dropped: payload was not a recognisable envelope');
         return;
       }
-      this._logger.debug(`SSE message received (type=${message.type}, lastModified=${message.lastModified ?? 'none'})`);
+      this._logger.debug(
+        `SSE message received (type=${message.type}, lastModifiedSeconds=${message.lastModifiedSeconds ?? 'none'})`,
+      );
       this._callbacks.onMessage(message);
     };
 
     source.onerror = (event) => {
-      const status = event?.code != null ? ` status ${event.code},` : '';
+      const status = event?.code !== undefined ? ` status ${event.code},` : '';
       this._logger.warn(`SSE connection error (${this._maskedUrl}):${status} ${event?.message ?? 'no message'}`);
       this._callbacks.onDisconnected();
     };
   }
 
-  /**
-   * Closes the connection, permanently for this instance. Handlers are detached first so a racing
-   * event cannot reach a provider that has moved on to a new lifecycle or a rotated URL.
-   */
+  /** closes for good; handlers detached first so a racing event can't reach a newer lifecycle */
   stop(): void {
     this._stopped = true;
     const source = this._source;
-    if (source == null) {
+    if (!source) {
       return;
     }
     this._source = undefined;

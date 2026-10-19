@@ -3,13 +3,13 @@ import { resolveLogger } from '../../shared/src/logger.js';
 import { isAbortError } from './abort';
 import { isNotModified, isRateLimited, isSuccess, type FetchResult } from './fetchResult';
 
-/** Cadence while SSE is disconnected or disabled: polling is the only update mechanism. */
+/** cadence while SSE is down or disabled */
 export const DEFAULT_POLL_INTERVAL_MS = 10_000;
 
-/** Cadence while SSE is connected: notifications carry the changes, polling is a safety net. */
+/** cadence while SSE is connected; polling is a safety net */
 export const SSE_CONNECTED_POLL_INTERVAL_MS = 600_000;
 
-/** Stands in for an SSE announcement without a `lastModified`, so it is never coalesced away or dropped. */
+/** stands in for an announcement without `lastModified`, so it's never coalesced away or dropped */
 const LAST_MODIFIED_UNKNOWN = Number.POSITIVE_INFINITY;
 
 export interface PollingCallbacks {
@@ -20,19 +20,13 @@ export interface PollingCallbacks {
   emitChange: (changedKeys: string[]) => void;
   emitSuccess: () => void;
   emitFailure: (reason: string) => void;
-  /** Whether a `Last-Modified`, in epoch milliseconds, is newer than the config in force. */
+  /** whether an epoch-ms `Last-Modified` is newer than the config in force */
   isNewerThanApplied: (lastModifiedMs: number) => boolean;
 }
 
 /**
- * Drives CDN fetching: a periodic poll, plus out-of-band re-fetches requested by SSE.
- *
- * Per providers.md 2.1.1 at most one fetch is in flight, and the two triggers lose that race
- * differently: a poll tick is skipped, emitting neither success nor failure so it cannot reset
- * the grace timer, while an SSE re-fetch is deferred and coalesced rather than dropped, since
- * dropping it would hide a config change for up to a full poll interval.
- *
- * The interval is anchored to request initiation (providers.md 2.1).
+ * periodic CDN poll plus SSE re-fetches, anchored to request start (providers.md 2.1)
+ * single-flight (providers.md 2.1.1): a losing tick is skipped silently, a losing SSE re-fetch coalesced
  */
 export class PollingManager {
   private _timer: ReturnType<typeof setInterval> | undefined;
@@ -41,13 +35,10 @@ export class PollingManager {
   private _stopped = true;
   private _intervalMs: number;
 
-  /**
-   * The SSE re-fetch waiting for the slot to free, as the greatest `lastModified` announced by the
-   * messages coalesced into it; they can arrive out of order.
-   */
+  /** pending SSE re-fetch, as the greatest `lastModified` (ms) coalesced into it */
   private _pendingSseRefetchMs: number | undefined;
 
-  /** Announcement the running fetch was issued for; undefined for a poll tick. */
+  /** announcement the running fetch serves; `undefined` for a poll tick */
   private _inFlightSseRefetchMs: number | undefined;
 
   private readonly _logger: Logger;
@@ -66,7 +57,7 @@ export class PollingManager {
   }
 
   start(): void {
-    if (!this._stopped && this._timer != null) {
+    if (!this._stopped && this._timer) {
       return;
     }
     this._stopped = false;
@@ -83,27 +74,19 @@ export class PollingManager {
     this._inFlightSseRefetchMs = undefined;
   }
 
-  /**
-   * Switches the cadence and re-anchors the schedule to now, so the first poll after a disconnect
-   * is one short interval away rather than up to a full ten minutes.
-   */
+  /** switches cadence and re-anchors to now, so a disconnect polls within one short interval */
   setIntervalMs(intervalMs: number): void {
     if (intervalMs === this._intervalMs) {
       return;
     }
     this._intervalMs = intervalMs;
-    if (!this._stopped && this._timer != null) {
+    if (!this._stopped && this._timer) {
       this._clearTimer();
       this._startTimer();
     }
   }
 
-  /**
-   * Requests an out-of-band fetch for an SSE notification, without disturbing the poll cadence.
-   * Runs immediately when the slot is free, otherwise coalesces into one pending re-fetch.
-   *
-   * @param lastModifiedMs epoch milliseconds announced by the message, when it carried one
-   */
+  /** out-of-band fetch for an SSE notification; runs now if the slot is free, else coalesces */
   requestSseRefetch(lastModifiedMs?: number): void {
     if (this._stopped) {
       return;
@@ -134,7 +117,7 @@ export class PollingManager {
     }
   }
 
-  /** @param sseRefetchMs announcement this fetch is issued for; omitted for a poll tick */
+  /** @param sseRefetchMs announcement this fetch serves; omitted for a poll tick */
   private _runPoll(sseRefetchMs?: number): void {
     if (this._stopped || this._inFlight) {
       return;
@@ -201,7 +184,7 @@ export class PollingManager {
       this._inFlightSseRefetchMs = undefined;
       this._inFlight = false;
       if (rateLimited) {
-        // the CDN never answered this re-fetch; keep it pending for the first fetch after the window
+        // CDN never answered; keep it pending for the first fetch after the window
         this._keepSseRefetchPending(issuedForMs);
       } else {
         this._drainPendingSseRefetch();
@@ -210,17 +193,17 @@ export class PollingManager {
   }
 
   private _keepSseRefetchPending(issuedForMs: number | undefined): void {
-    if (issuedForMs == null || this._stopped) {
+    if (issuedForMs === undefined || this._stopped) {
       return;
     }
     this._deferSseRefetch(issuedForMs);
     this._logger.debug('SSE re-fetch rate limited; keeping it pending');
   }
 
-  /** Issues the deferred SSE re-fetch, unless the finished fetch already satisfied it. */
+  /** issues the deferred SSE re-fetch unless the finished fetch already satisfied it */
   private _drainPendingSseRefetch(): void {
     const announcedMs = this._pendingSseRefetchMs;
-    if (announcedMs == null || this._stopped) {
+    if (announcedMs === undefined || this._stopped) {
       return;
     }
     this._pendingSseRefetchMs = undefined;

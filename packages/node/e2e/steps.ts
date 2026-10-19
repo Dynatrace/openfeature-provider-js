@@ -121,8 +121,6 @@ After(async () => {
   await OpenFeature.close().catch(() => undefined);
 });
 
-// GIVEN
-
 Given('a mock server is running', () => {
   sseEnabled = false;
 });
@@ -173,8 +171,6 @@ Given('the CDN responds slower than the request timeout', async () => {
 Given('the CDN responds slowly but within the request timeout', async () => {
   await delayCdnResponses(SLOW_BUT_WITHIN_TIMEOUT_DELAY_MS);
 });
-
-// WHEN
 
 When('the provider is initialized', async () => {
   try {
@@ -297,8 +293,6 @@ When('an SSE re-fetch is triggered shortly before the next poll tick', async () 
   await waitFor(SHORTLY_BEFORE_MS, async () => (await mockServer.countCdnRequests()) > before);
 });
 
-// THEN
-
 Then('initialization succeeds', () => {
   expect(initError, `expected init to succeed but got: ${String(initError)}`).toBeUndefined();
 });
@@ -358,7 +352,7 @@ Then('the active poll interval is the SSE_CONNECTED_POLL_INTERVAL', async () => 
   expect(POLL_TIMEOUT_MS, 'observation window must be shorter than the interval under test').toBeLessThan(
     SSE_CONNECTED_POLL_INTERVAL_MS,
   );
-  // the connect catch-up fetch must be in before the baseline, or it lands mid-observation
+  // the connect catch-up fetch must be in before the baseline, or it arrives mid-observation
   await awaitSseSettled();
   const baseline = await mockServer.countCdnRequests();
   await sleep(POLL_TIMEOUT_MS);
@@ -429,7 +423,7 @@ Then('consecutive poll ticks are one poll interval apart', async () => {
 // the polling timer starts once initialization has finished, not when it began
 Then('the first poll tick is one poll interval after initialization completed', async () => {
   const anchor = pollingStartedAtMs;
-  /** Finds when the first CDN request after initialization completed arrived, if any has. */
+  /** finds when the first CDN request after initialization completed arrived, if any has */
   const findFirstRequestAfterAnchor = async () =>
     (await mockServer.fetchCdnRequests()).find((r) => r.receivedAtMs > anchor)?.receivedAtMs;
   await waitFor(FIRST_TICK_TIMEOUT_MS, async () => (await findFirstRequestAfterAnchor()) !== undefined);
@@ -461,20 +455,20 @@ Then(/^evaluating flag "([^"]*)" returns a Flag-Not-Found error$/, async (flag: 
   expect(details.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND);
 });
 
-/** Sets the CDN responses on the mock and remembers them, so a later step can delay them. */
+/** sets the CDN responses on the mock and remembers them, so a later step can delay them */
 async function setCdnResponses(responses: CdnResponse[]): Promise<void> {
   cdnResponses = responses;
   await mockServer.setCdnResponses(cdnResponses);
 }
 
-/** Re-sets the current CDN responses with every one held back by delayMs. */
+/** re-sets the current CDN responses with every one held back by delayMs */
 async function delayCdnResponses(delayMs: number): Promise<void> {
   expect(cdnResponses, 'no CDN response set to delay').not.toHaveLength(0);
   cdnResponses = cdnResponses.map((r) => ({ ...r, delayMs }));
   await mockServer.setCdnResponses(cdnResponses);
 }
 
-/** Builds a fresh provider for the current SDK key and binds it to this scenario's domain, waiting for init. */
+/** builds a fresh provider for the current SDK key and binds it to this scenario's domain, waiting for init */
 async function registerProviderWithSdk(): Promise<void> {
   provider = new DynatraceProvider(
     sdkKey,
@@ -484,7 +478,7 @@ async function registerProviderWithSdk(): Promise<void> {
   await OpenFeature.setProviderAndWait(domain, provider);
 }
 
-/** Waits for the SSE stream and its connect catch-up fetch, so a READY scenario never races the stream; no-op with SSE off. */
+/** waits for the SSE stream and its catch-up fetch so READY scenarios never race it; no-op with SSE off */
 async function awaitSseSettled(): Promise<void> {
   if (!sseEnabled) {
     return;
@@ -500,15 +494,15 @@ async function awaitSseSettled(): Promise<void> {
   ).toBe(true);
 }
 
-/** Waits for a fetch to arrive within intervalMs. */
+/** waits for a fetch to arrive within intervalMs */
 async function awaitCdnRequestWithin(intervalMs: number): Promise<void> {
   const baseline = await mockServer.countCdnRequests();
   await waitFor(intervalMs, async () => (await mockServer.countCdnRequests()) > baseline);
 }
 
-/** Returns the next recorded event of the expected type, advancing the cursor past it so repeated steps consume distinct events. */
+/** next recorded event of the type; advances the cursor so repeated steps consume distinct events */
 async function consumeEvent(expected: ProviderEvents): Promise<EventDetails | undefined> {
-  /** Finds the next matching event from the cursor; -1 when none has arrived. */
+  /** finds the next matching event from the cursor; -1 when none has arrived */
   const findNext = () => events.findIndex((e, i) => i >= eventCursor && e.event === expected);
   await pollUntil(EVENT_TIMEOUT_MS, () => findNext() >= 0);
   const index = findNext();
@@ -520,49 +514,49 @@ async function consumeEvent(expected: ProviderEvents): Promise<EventDetails | un
   return events[index].details;
 }
 
-/** Rewrites a flag configuration fixture to advertise a direct SSE url. */
+/** rewrites a flag configuration fixture to advertise a direct SSE url */
 function advertiseSseUrl(configJson: string, url: string): string {
   const resolved = url.replace(MOCK_SERVER_PLACEHOLDER, new URL(mockServer.origin).host);
   return JSON.stringify({ ...JSON.parse(configJson), eventStreams: [{ type: 'sse', url: resolved }] });
 }
 
-/** Strips one matching pair of surrounding single or double quotes, if present. */
+/** strips one matching pair of surrounding single or double quotes, if present */
 function unquote(value: string): string {
   const trimmed = value.trim();
   const quoted = trimmed.length >= 2 && (trimmed[0] === '"' || trimmed[0] === "'") && trimmed.at(-1) === trimmed[0];
   return quoted ? trimmed.slice(1, -1) : trimmed;
 }
 
-/** Moves the baseline for "further request" counts to now. */
+/** moves the baseline for "further request" counts to now */
 async function resetCountBaseline(): Promise<void> {
   countBaseline = await mockServer.countCdnRequests();
 }
 
-/** Counts CDN requests since the baseline. */
+/** counts CDN requests since the baseline */
 async function countFurtherRequests(): Promise<number> {
   return (await mockServer.countCdnRequests()) - countBaseline;
 }
 
-/** Computes the next tick boundary on the cadence anchored at pollingStartedAtMs. */
+/** computes the next tick boundary on the cadence anchored at pollingStartedAtMs */
 function computeNextTickAtMs(): number {
   const elapsed = Date.now() - pollingStartedAtMs;
   return pollingStartedAtMs + (Math.floor(elapsed / POLL_INTERVAL_MS) + 1) * POLL_INTERVAL_MS;
 }
 
-/** Gets the 0-indexed recorded CDN request, asserting at least that many arrived. */
+/** gets the 0-indexed recorded CDN request, asserting at least that many arrived */
 async function getNthCdnRequest(index: number): Promise<RecordedRequest> {
   const requests = await mockServer.fetchCdnRequests();
   expect(requests.length, `expected at least ${index + 1} CDN request(s)`).toBeGreaterThan(index);
   return requests[index];
 }
 
-/** Checks a boolean flag through the client; defaults to the opposite so a missing flag never matches. */
+/** checks a boolean flag through the client; defaults to the opposite so a missing flag never matches */
 async function isFlagValue(flag: string, want: boolean): Promise<boolean> {
   return (await client.getBooleanValue(flag, !want)) === want;
 }
 AfterAll(() => MockServer.stop());
 
-/** Asserts a measured gap is one poll interval, within the cadence tolerance. */
+/** asserts a measured gap is one poll interval, within the cadence tolerance */
 function assertCadence(measuredMs: number, what: string): void {
   expect(
     Math.abs(measuredMs - POLL_INTERVAL_MS),
@@ -570,14 +564,14 @@ function assertCadence(measuredMs: number, what: string): void {
   ).toBeLessThanOrEqual(CADENCE_TOLERANCE_MS);
 }
 
-/** Loads a flag configuration fixture from the harness by file name, extension omitted. */
+/** loads a flag configuration fixture from the harness by file name, extension omitted */
 function loadFlagConfig(name: string): string {
   return readFileSync(new URL(`${name}.json`, FLAGS_DIR), 'utf8');
 }
 
 type Condition = () => boolean | Promise<boolean>;
 
-/** Polls condition until it holds or timeoutMs elapses; reports whether it held. */
+/** polls condition until it holds or timeoutMs elapses; reports whether it held */
 async function pollUntil(timeoutMs: number, condition: Condition): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -589,12 +583,12 @@ async function pollUntil(timeoutMs: number, condition: Condition): Promise<boole
   return await condition();
 }
 
-/** Polls condition until it holds, failing if it still doesn't after timeoutMs. */
+/** polls condition until it holds, failing if it still doesn't after timeoutMs */
 async function waitFor(timeoutMs: number, condition: Condition): Promise<void> {
   expect(await pollUntil(timeoutMs, condition), `condition not met within ${timeoutMs / MS_PER_SECOND}s`).toBe(true);
 }
 
-/** Asserts condition keeps holding for the whole of durationMs, failing with message the first time it doesn't. */
+/** asserts condition keeps holding for the whole of durationMs, failing with message the first time it doesn't */
 async function assertHoldsFor(
   durationMs: number,
   condition: Condition,
@@ -612,12 +606,12 @@ async function assertHoldsFor(
   }
 }
 
-/** Sleeps until the given epoch millis; returns immediately if that has passed. */
+/** sleeps until the given epoch millis; returns immediately if that has passed */
 async function sleepUntil(epochMs: number): Promise<void> {
   await sleep(epochMs - Date.now());
 }
 
-/** Sleeps for ms, treating a negative duration as zero. */
+/** sleeps for ms, treating a negative duration as zero */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }

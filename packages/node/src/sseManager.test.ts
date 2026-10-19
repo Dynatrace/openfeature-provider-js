@@ -47,7 +47,7 @@ describe('SseManager', () => {
     expect(callbacks.onMessage).toHaveBeenCalledWith({
       type: 'refetchConfig',
       etag: undefined,
-      lastModified: 1771622898,
+      lastModifiedSeconds: 1771622898,
     });
   });
 

@@ -36,10 +36,7 @@ export interface DynatraceProviderOptions {
   configOrigin?: string;
   /** Override the metrics origin (scheme, host, and port; no path, query, or fragment). */
   metricsOrigin?: string;
-  /**
-   * Opts out of SSE change notifications. Polling then stays at its 10s cadence rather than
-   * relaxing to the 10m safety net, so changes still arrive, just later.
-   */
+  /** opt out of SSE; polling then stays at 10s instead of relaxing to 10m */
   disableSse?: boolean;
   /**
    * Receives provider diagnostics. Defaults to the OpenFeature console logger, which emits
@@ -51,7 +48,7 @@ export interface DynatraceProviderOptions {
 export interface ResolvedProviderOptions {
   sdkKey: string;
   cdnUrl: string;
-  /** Origin the CDN URL was built from; the fallback for an SSE endpoint without its own. */
+  /** origin the CDN URL was built from; fallback for an SSE endpoint without one */
   configOrigin: string;
   metricsUrl: string;
   publicKey: string;

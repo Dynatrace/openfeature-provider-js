@@ -484,7 +484,7 @@ describe('DynatraceProvider', () => {
 const LM_1 = 'Wed, 01 Jan 2025 00:00:00 GMT';
 const LM_2 = 'Wed, 01 Jan 2025 00:01:00 GMT';
 
-/** Counts CDN GETs, ignoring metrics POSTs. */
+/** counts CDN GETs, ignoring metrics POSTs */
 function countCdnCalls(fetchMock: unknown): number {
   return vi.mocked(fetchMock as typeof fetch).mock.calls.filter(([, init]) => init?.method !== 'POST').length;
 }
@@ -530,7 +530,7 @@ describe('DynatraceProvider SSE', () => {
     expect(urls).toEqual([SSE_URL]);
 
     sources[0].onopen?.({});
-    // The relaxed cadence is 10s here, so the 100ms disconnected tick no longer fires.
+    // relaxed cadence is 10s here, so the 100ms tick no longer fires
     await vi.advanceTimersByTimeAsync(500);
     expect(provider.state).toBe('READY');
 
@@ -664,7 +664,7 @@ describe('DynatraceProvider SSE', () => {
     await vi.advanceTimersByTimeAsync(500);
     expect(provider.state).toBe('STALE');
 
-    // The tightened 100ms cadence is what brings it back.
+    // the tightened 100ms cadence brings it back
     await vi.advanceTimersByTimeAsync(100);
     expect(provider.state).toBe('READY');
     await provider.onClose();
