@@ -87,7 +87,7 @@ export class PollingManager {
   }
 
   /** out-of-band fetch for an SSE notification; runs now if the slot is free, else coalesces */
-  requestSseRefetch(lastModifiedMs?: number): void {
+  requestOutOfBandFetch(lastModifiedMs?: number): void {
     if (this._stopped) {
       return;
     }

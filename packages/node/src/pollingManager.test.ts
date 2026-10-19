@@ -284,7 +284,7 @@ describe('PollingManager SSE re-fetch', () => {
     const manager = new PollingManager(callbacks, 10_000);
     manager.start();
 
-    manager.requestSseRefetch();
+    manager.requestOutOfBandFetch();
     await vi.advanceTimersByTimeAsync(0);
 
     expect(callbacks.fetchFlags).toHaveBeenCalledTimes(1);
@@ -297,7 +297,7 @@ describe('PollingManager SSE re-fetch', () => {
     manager.start();
 
     await vi.advanceTimersByTimeAsync(900);
-    manager.requestSseRefetch();
+    manager.requestOutOfBandFetch();
     await vi.advanceTimersByTimeAsync(100);
 
     // out-of-band fetch plus the tick already due; ticker not re-anchored
@@ -323,7 +323,7 @@ describe('PollingManager SSE re-fetch', () => {
     await vi.advanceTimersByTimeAsync(10);
     expect(fetchFlags).toHaveBeenCalledTimes(1);
 
-    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:10 GMT'));
+    manager.requestOutOfBandFetch(Date.parse('Wed, 01 Jan 2025 00:00:10 GMT'));
     expect(fetchFlags).toHaveBeenCalledTimes(1);
 
     settle!({ status: 304, body: null, etag: null, lastModified: null });
@@ -347,9 +347,9 @@ describe('PollingManager SSE re-fetch', () => {
     const manager = new PollingManager(callbacks, 10_000);
     manager.start();
 
-    manager.requestSseRefetch();
+    manager.requestOutOfBandFetch();
     await vi.advanceTimersByTimeAsync(0);
-    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:00 GMT'));
+    manager.requestOutOfBandFetch(Date.parse('Wed, 01 Jan 2025 00:00:00 GMT'));
 
     settle!({ status: 200, body: '{}', etag: null, lastModified: 'Wed, 01 Jan 2025 00:00:05 GMT' });
     await vi.advanceTimersByTimeAsync(0);
@@ -373,12 +373,12 @@ describe('PollingManager SSE re-fetch', () => {
     const manager = new PollingManager(callbacks, 10_000);
     manager.start();
 
-    manager.requestSseRefetch();
+    manager.requestOutOfBandFetch();
     await vi.advanceTimersByTimeAsync(0);
 
     // out of order: newest announced first
-    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
-    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:10 GMT'));
+    manager.requestOutOfBandFetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
+    manager.requestOutOfBandFetch(Date.parse('Wed, 01 Jan 2025 00:00:10 GMT'));
 
     settle!({ status: 200, body: '{}', etag: null, lastModified: 'Wed, 01 Jan 2025 00:00:20 GMT' });
     await vi.advanceTimersByTimeAsync(0);
@@ -405,10 +405,10 @@ describe('PollingManager SSE re-fetch', () => {
     const manager = new PollingManager(callbacks, 10_000);
     manager.start();
 
-    manager.requestSseRefetch();
+    manager.requestOutOfBandFetch();
     await vi.advanceTimersByTimeAsync(0);
-    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
-    manager.requestSseRefetch();
+    manager.requestOutOfBandFetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
+    manager.requestOutOfBandFetch();
 
     settle!({ status: 200, body: '{}', etag: null, lastModified: 'Wed, 01 Jan 2025 00:00:30 GMT' });
     await vi.advanceTimersByTimeAsync(0);
@@ -430,7 +430,7 @@ describe('PollingManager SSE re-fetch', () => {
     const manager = new PollingManager(callbacks, 1_000);
     manager.start();
 
-    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
+    manager.requestOutOfBandFetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
     await vi.advanceTimersByTimeAsync(0);
     expect(fetchFlags).toHaveBeenCalledTimes(1);
 
@@ -447,7 +447,7 @@ describe('PollingManager SSE re-fetch', () => {
     manager.start();
     manager.stop();
 
-    manager.requestSseRefetch();
+    manager.requestOutOfBandFetch();
     await vi.advanceTimersByTimeAsync(0);
 
     expect(callbacks.fetchFlags).not.toHaveBeenCalled();
@@ -465,9 +465,9 @@ describe('PollingManager SSE re-fetch', () => {
     const manager = new PollingManager(callbacks, 10_000);
     manager.start();
 
-    manager.requestSseRefetch();
+    manager.requestOutOfBandFetch();
     await vi.advanceTimersByTimeAsync(0);
-    manager.requestSseRefetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
+    manager.requestOutOfBandFetch(Date.parse('Wed, 01 Jan 2025 00:00:30 GMT'));
     manager.stop();
 
     settle!({ status: 304, body: null, etag: null, lastModified: null });

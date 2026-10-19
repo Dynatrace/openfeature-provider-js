@@ -288,7 +288,7 @@ When('an SSE re-fetch is triggered shortly before the next poll tick', async () 
   // driven directly: a live stream would switch the provider onto the SSE-connected cadence
   const pollingManager = provider['_pollingManager'];
   expect(pollingManager, 'provider has not been initialized; no polling manager').toBeDefined();
-  pollingManager!.requestSseRefetch();
+  pollingManager!.requestOutOfBandFetch();
   // wait for it to reach the CDN, or it is miscounted as a request the contended tick made
   await waitFor(SHORTLY_BEFORE_MS, async () => (await mockServer.countCdnRequests()) > before);
 });

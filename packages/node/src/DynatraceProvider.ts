@@ -385,7 +385,7 @@ export class DynatraceProvider implements Provider {
       this._logger.info(`SSE connected; poll interval relaxed to ${this._pollIntervalSseConnectedMs}ms`);
     }
     if (!wasConnected || hadPendingDisconnect) {
-      this._pollingManager?.requestSseRefetch();
+      this._pollingManager?.requestOutOfBandFetch();
     }
   }
 
@@ -434,7 +434,7 @@ export class DynatraceProvider implements Provider {
     // never dropped up front: second-precision timestamps can tie, and the conditional GET is cheap
     const announcedMs =
       message.lastModifiedSeconds !== undefined ? message.lastModifiedSeconds * MS_PER_SECOND : undefined;
-    this._pollingManager?.requestSseRefetch(announcedMs);
+    this._pollingManager?.requestOutOfBandFetch(announcedMs);
   }
 
   private _onFetchSuccess(): void {
