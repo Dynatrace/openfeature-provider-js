@@ -8,6 +8,8 @@ The provider evaluates flags in-process: on initialization it fetches your flag 
 
 ## Installation
 
+Requires Node.js 22.12 or later.
+
 ```bash
 npm install @dynatrace/openfeature-provider-node @openfeature/server-sdk
 ```

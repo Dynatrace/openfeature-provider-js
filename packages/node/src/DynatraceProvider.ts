@@ -383,6 +383,7 @@ export class DynatraceProvider implements Provider {
     this._sseManager?.stop();
     this._sseManager = undefined;
     this._sseConnected = false;
+    this._pollingManager?.setIntervalMs(this._pollIntervalMs);
   }
 
   private _onSseConnected(): void {

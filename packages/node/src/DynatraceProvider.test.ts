@@ -484,6 +484,11 @@ describe('DynatraceProvider', () => {
 const LM_1 = 'Wed, 01 Jan 2025 00:00:00 GMT';
 const LM_2 = 'Wed, 01 Jan 2025 00:01:00 GMT';
 
+/** Counts CDN GETs, ignoring metrics POSTs. */
+function countCdnCalls(fetchMock: unknown): number {
+  return vi.mocked(fetchMock as typeof fetch).mock.calls.filter(([, init]) => init?.method !== 'POST').length;
+}
+
 function createSseProvider(
   responses: CdnResponse[],
   options: { disableSse?: boolean } = {},
@@ -694,6 +699,44 @@ describe('DynatraceProvider SSE', () => {
     expect(urls).toEqual([SSE_URL, ROTATED_SSE_URL]);
     expect(sources[0].closed).toBe(true);
     expect(sources[1].closed).toBe(false);
+    await provider.onClose();
+  });
+
+  it('polls at the disconnected cadence while a rotated stream has yet to connect', async () => {
+    const { provider, sources, fetch } = createSseProvider([
+      { body: flagJsonWithSse(SSE_URL), lastModified: LM_1 },
+      { body: flagJsonWithSse(ROTATED_SSE_URL, '1741780801'), lastModified: LM_2 },
+      { status: 304 },
+    ]);
+    await provider.initialize();
+    sources[0].onopen?.({});
+    await vi.advanceTimersByTimeAsync(10_000);
+    sources[1].onerror?.({ message: 'refused' });
+
+    const callsBefore = countCdnCalls(fetch);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // 100ms cadence, not the 10s one
+    expect(countCdnCalls(fetch) - callsBefore).toBeGreaterThanOrEqual(5);
+    await provider.onClose();
+  });
+
+  it('polls at the disconnected cadence once the config stops advertising a stream', async () => {
+    const { provider, sources, fetch } = createSseProvider([
+      { body: flagJsonWithSse(SSE_URL), lastModified: LM_1 },
+      { body: TEST_FLAG_JSON, lastModified: LM_2 },
+      { status: 304 },
+    ]);
+    await provider.initialize();
+    sources[0].onopen?.({});
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(sources[0].closed).toBe(true);
+
+    const callsBefore = countCdnCalls(fetch);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // 100ms cadence, not the 10s one
+    expect(countCdnCalls(fetch) - callsBefore).toBeGreaterThanOrEqual(5);
     await provider.onClose();
   });
 
