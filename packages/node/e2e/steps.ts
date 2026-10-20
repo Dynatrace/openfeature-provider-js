@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { ErrorCode, OpenFeature, ProviderEvents, type Client, type EventDetails } from '@openfeature/server-sdk';
 import { After, AfterAll, Before, Given, Then, When, setDefaultTimeout } from '@cucumber/cucumber';
 import { expect } from 'vitest';
-import { DynatraceProvider, SSE_DISCONNECT_DEBOUNCE_MS } from '../src/DynatraceProvider.js';
+import { DynatraceProvider } from '../src/DynatraceProvider.js';
 import { REQUEST_TIMEOUT_MS as PROVIDER_REQUEST_TIMEOUT_MS } from '../src/cdnFetcher.js';
 import { DEFAULT_POLL_INTERVAL_MS } from '../src/pollingManager.js';
 import { HARNESS_DIR, HTTP_OK, MockServer, SSE_PATH, type CdnResponse, type RecordedRequest } from './mockServer.js';
@@ -214,39 +214,18 @@ When('polling triggers a configuration refetch', async () => {
   await awaitCdnRequestWithin(POLL_TIMEOUT_MS);
 });
 
-When('polling triggers a configuration refetch after the SSE_DISCONNECTED_POLL_INTERVAL', async () => {
-  await awaitCdnRequestWithin(DEFAULT_POLL_INTERVAL_MS);
-});
-
-When('polling triggers a configuration refetch after the SSE_CONNECTED_POLL_INTERVAL', async () => {
-  await awaitCdnRequestWithin(SSE_CONNECTED_POLL_INTERVAL_MS);
-});
-
 // a blip: the backend drops the stream and refuses connections for the outage, then accepts them again
-When(
-  /^the SSE stream drops for (\d+) seconds and reconnects within the DISCONNECT_DEBOUNCE_TIME_WINDOW$/,
-  async (outageSeconds: number) => {
-    await mockServer.dropSse(outageSeconds * MS_PER_SECOND);
-    expect(
-      await pollUntil(SSE_DISCONNECT_DEBOUNCE_MS, async () => (await mockServer.countSseClients()) >= 1),
-      `SSE did not reconnect within the ${SSE_DISCONNECT_DEBOUNCE_MS}ms disconnect debounce window`,
-    ).toBe(true);
-  },
-);
-
-// a sustained outage: connections stay refused until the stream is restored or reset
-When('the SSE stream drops and stays down past the DISCONNECT_DEBOUNCE_TIME_WINDOW', async () => {
-  await mockServer.dropSse();
-  // the following steps assert what the escalation did
-  await pollUntil(SSE_DISCONNECT_DEBOUNCE_MS + SETTLE_MS, () => client.providerStatus !== 'READY');
-});
-
-When('the SSE stream reconnects', async () => {
-  await mockServer.restoreSse();
+When(/^the SSE stream drops for (\d+) seconds and reconnects$/, async (outageSeconds: number) => {
+  await mockServer.dropSse(outageSeconds * MS_PER_SECOND);
   expect(
     await pollUntil(SSE_RECONNECT_TIMEOUT_MS, async () => (await mockServer.countSseClients()) >= 1),
-    'SSE did not reconnect after the outage was lifted',
+    `SSE did not reconnect after the ${outageSeconds}s outage`,
   ).toBe(true);
+});
+
+// a sustained outage: connections stay refused until the stream is restored or reset
+When('the SSE stream drops and stays down', async () => {
+  await mockServer.dropSse();
 });
 
 When(/^the server emits an SSE message (.*)$/, async (payload: string) => {
@@ -256,7 +235,7 @@ When(/^the server emits an SSE message (.*)$/, async (payload: string) => {
   await pollUntil(SETTLE_MS, async () => (await mockServer.countCdnRequests()) > baseline);
 });
 
-When('the grace period expires', async () => {
+When('the GRACE_PERIOD expires', async () => {
   await pollUntil(GRACE_PERIOD_MS + SETTLE_MS, () => client.providerStatus === 'ERROR');
 });
 
@@ -308,6 +287,14 @@ Then(/^the provider state is "([^"]*)"$/, async (state: string) => {
 
 Then(/^a (\w+) event is emitted$/, async (event: string) => {
   await consumeEvent(event as ProviderEvents);
+});
+
+// whole scenario, not from the cursor: a STALE that already recovered must still fail
+Then(/^no (\w+) event is emitted$/, (event: string) => {
+  expect(
+    events.some((recorded) => recorded.event === event),
+    `unexpected ${event} event was emitted`,
+  ).toBe(false);
 });
 
 Then(/^a PROVIDER_CONFIGURATION_CHANGED event is emitted with changed flag "([^"]*)"$/, async (flag: string) => {

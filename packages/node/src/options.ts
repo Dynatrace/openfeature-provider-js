@@ -27,7 +27,6 @@ export interface ProviderInternals {
   gracePeriodMs?: number;
   pollIntervalMs?: number;
   pollIntervalSseConnectedMs?: number;
-  sseDisconnectDebounceMs?: number;
   eventSourceFactory?: EventSourceFactory;
 }
 

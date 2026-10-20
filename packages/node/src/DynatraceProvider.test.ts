@@ -508,7 +508,6 @@ function createSseProvider(
     eventSourceFactory,
     pollIntervalMs: 100,
     pollIntervalSseConnectedMs: 10_000,
-    sseDisconnectDebounceMs: 500,
     ...internals,
   } as any);
   return { provider, sources, urls, eventSourceFactory, fetch: internals.fetch ?? fetchMock };
@@ -620,57 +619,34 @@ describe('DynatraceProvider SSE', () => {
     await provider.onClose();
   });
 
-  it('stays READY through a blip that reconnects inside the debounce window', async () => {
-    const { provider, sources } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_1 }, { status: 304 }]);
+  it('stays READY and tightens the poll cadence when the stream drops', async () => {
+    const { provider, sources, fetch } = createSseProvider([
+      { body: flagJsonWithSse(), lastModified: LM_1 },
+      { status: 304 },
+    ]);
     await provider.initialize();
     sources[0].onopen?.({});
+    await vi.advanceTimersByTimeAsync(0);
 
     const onStale = vi.fn();
+    const onReady = vi.fn();
     provider.events.addHandler(ProviderEvents.Stale, onStale);
+    provider.events.addHandler(ProviderEvents.Ready, onReady);
+    const callsBefore = (fetch as any).mock.calls.length;
 
     sources[0].onerror?.({ message: 'socket hang up' });
-    await vi.advanceTimersByTimeAsync(400);
-    sources[0].onopen?.({});
-    await vi.advanceTimersByTimeAsync(400);
+    await vi.advanceTimersByTimeAsync(350);
 
+    // 100ms disconnected cadence: 3 ticks
+    expect((fetch as any).mock.calls.length).toBe(callsBefore + 3);
+    expect(provider.state).toBe('READY');
     expect(onStale).not.toHaveBeenCalled();
-    expect(provider.state).toBe('READY');
+    // a silent STALE would show up as a recovery
+    expect(onReady).not.toHaveBeenCalled();
     await provider.onClose();
   });
 
-  it('goes STALE when a fault outlives the debounce window', async () => {
-    const { provider, sources } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_1 }, { status: 304 }]);
-    await provider.initialize();
-    sources[0].onopen?.({});
-
-    const onStale = vi.fn();
-    provider.events.addHandler(ProviderEvents.Stale, onStale);
-
-    sources[0].onerror?.({ message: 'socket hang up' });
-    sources[0].onerror?.({ message: 'socket hang up' });
-    await vi.advanceTimersByTimeAsync(500);
-
-    expect(provider.state).toBe('STALE');
-    expect(onStale).toHaveBeenCalledOnce();
-    await provider.onClose();
-  });
-
-  it('recovers to READY on the first good poll after a disconnect', async () => {
-    const { provider, sources } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_1 }, { status: 304 }]);
-    await provider.initialize();
-    sources[0].onopen?.({});
-
-    sources[0].onerror?.({ message: 'gone' });
-    await vi.advanceTimersByTimeAsync(500);
-    expect(provider.state).toBe('STALE');
-
-    // the tightened 100ms cadence brings it back
-    await vi.advanceTimersByTimeAsync(100);
-    expect(provider.state).toBe('READY');
-    await provider.onClose();
-  });
-
-  it('stays READY when a poll fails while the stream is healthy', async () => {
+  it('goes STALE when a fetch fails while the stream is connected', async () => {
     const { provider, sources } = createSseProvider([{ body: flagJsonWithSse(), lastModified: LM_1 }, { status: 500 }]);
     await provider.initialize();
     sources[0].onopen?.({});
@@ -681,8 +657,27 @@ describe('DynatraceProvider SSE', () => {
     sources[0].onmessage?.({ data: JSON.stringify({ type: 'refetchConfig' }) });
     await vi.advanceTimersByTimeAsync(1_000);
 
-    expect(provider.state).toBe('READY');
-    expect(onStale).not.toHaveBeenCalled();
+    expect(provider.state).toBe('STALE');
+    expect(onStale).toHaveBeenCalledOnce();
+    await provider.onClose();
+  });
+
+  it('pulls a catch-up fetch on each connect and reconnect', async () => {
+    const { provider, sources, fetch } = createSseProvider([
+      { body: flagJsonWithSse(), lastModified: LM_1 },
+      { status: 304 },
+    ]);
+    await provider.initialize();
+    const callsBefore = (fetch as any).mock.calls.length;
+
+    sources[0].onopen?.({});
+    await vi.advanceTimersByTimeAsync(0);
+    expect((fetch as any).mock.calls.length).toBe(callsBefore + 1);
+
+    sources[0].onerror?.({ message: 'socket hang up' });
+    sources[0].onopen?.({});
+    await vi.advanceTimersByTimeAsync(0);
+    expect((fetch as any).mock.calls.length).toBe(callsBefore + 2);
     await provider.onClose();
   });
 

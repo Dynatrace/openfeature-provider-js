@@ -23,9 +23,6 @@ import { PACKAGE_VERSION } from './version.js';
 /** STALE -> ERROR grace period (not user-configurable per spec). */
 export const GRACE_PERIOD_MS = 60_000;
 
-/** how long an SSE fault must last to count as a disconnect; avoids STALE/READY flapping on blips */
-export const SSE_DISCONNECT_DEBOUNCE_MS = 5_000;
-
 const MS_PER_SECOND = 1_000;
 
 type ProviderState = 'NOT_READY' | 'READY' | 'STALE' | 'ERROR';
@@ -46,7 +43,6 @@ export class DynatraceProvider implements Provider {
   private readonly _gracePeriodMs: number;
   private readonly _pollIntervalMs: number;
   private readonly _pollIntervalSseConnectedMs: number;
-  private readonly _sseDisconnectDebounceMs: number;
   private readonly _createEventSource: EventSourceFactory;
 
   private _state: ProviderState = 'NOT_READY';
@@ -57,7 +53,6 @@ export class DynatraceProvider implements Provider {
   private _pollingManager: PollingManager | undefined;
   private _sseManager: SseManager | undefined;
   private _sseConnected = false;
-  private _sseDisconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(sdkKey: string, options?: DynatraceProviderOptions);
   /** @internal Test seam; stripped from the published declarations. */
@@ -98,7 +93,6 @@ export class DynatraceProvider implements Provider {
     this._gracePeriodMs = internals?.gracePeriodMs ?? GRACE_PERIOD_MS;
     this._pollIntervalMs = internals?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this._pollIntervalSseConnectedMs = internals?.pollIntervalSseConnectedMs ?? SSE_CONNECTED_POLL_INTERVAL_MS;
-    this._sseDisconnectDebounceMs = internals?.sseDisconnectDebounceMs ?? SSE_DISCONNECT_DEBOUNCE_MS;
     this._createEventSource = internals?.eventSourceFactory ?? defaultEventSourceFactory;
   }
 
@@ -211,7 +205,6 @@ export class DynatraceProvider implements Provider {
     this._pollingManager?.stop();
     this._pollingManager = undefined;
     this._cancelGraceTimer();
-    this._cancelSseDisconnectTimer();
     await this._metricsFlusher.shutdown();
     this._state = 'NOT_READY';
   }
@@ -367,62 +360,28 @@ export class DynatraceProvider implements Provider {
   }
 
   private _stopSse(): void {
-    this._cancelSseDisconnectTimer();
     this._sseManager?.stop();
     this._sseManager = undefined;
     this._sseConnected = false;
     this._pollingManager?.setIntervalMs(this._pollIntervalMs);
   }
 
+  /** SSE only sets the poll cadence; provider state follows fetch outcomes (providers.md 4.1) */
   private _onSseConnected(): void {
-    // pending escalation means a blip; catch up on anything missed
-    const hadPendingDisconnect = this._cancelSseDisconnectTimer();
-    const wasConnected = this._sseConnected;
     this._sseConnected = true;
+    this._logger.info(`SSE connected; poll interval relaxed to ${this._pollIntervalSseConnectedMs}ms`);
     this._pollingManager?.setIntervalMs(this._pollIntervalSseConnectedMs);
-
-    if (!wasConnected) {
-      this._logger.info(`SSE connected; poll interval relaxed to ${this._pollIntervalSseConnectedMs}ms`);
-    }
-    if (!wasConnected || hadPendingDisconnect) {
-      this._pollingManager?.requestOutOfBandFetch();
-    }
+    // catch up on anything missed while down
+    this._pollingManager?.requestOutOfBandFetch();
   }
 
-  /** starts the debounce window; a fault only counts if the stream stays down */
   private _onSseDisconnected(): void {
-    if (!this._sseConnected || this._sseDisconnectTimer) {
-      return;
-    }
-    this._logger.debug(`SSE fault; waiting ${this._sseDisconnectDebounceMs}ms before treating it as a disconnect`);
-    this._sseDisconnectTimer = setTimeout(() => this._escalateSseDisconnect(), this._sseDisconnectDebounceMs);
-  }
-
-  /** fault outlived the debounce: tighten polling, go STALE; no catch-up fetch, it would flip back to READY */
-  private _escalateSseDisconnect(): void {
-    this._sseDisconnectTimer = undefined;
     if (!this._sseConnected) {
       return;
     }
     this._sseConnected = false;
     this._logger.warn(`SSE disconnected; poll interval tightened to ${this._pollIntervalMs}ms`);
     this._pollingManager?.setIntervalMs(this._pollIntervalMs);
-
-    if (this._state === 'READY') {
-      this._state = 'STALE';
-      this.events.emit(ProviderEvents.Stale, { message: 'SSE disconnected' });
-      this._startGraceTimer();
-    }
-  }
-
-  /** cancels a pending escalation; returns whether one was pending */
-  private _cancelSseDisconnectTimer(): boolean {
-    if (!this._sseDisconnectTimer) {
-      return false;
-    }
-    clearTimeout(this._sseDisconnectTimer);
-    this._sseDisconnectTimer = undefined;
-    return true;
   }
 
   private _onSseMessage(message: SseMessage): void {
@@ -447,11 +406,6 @@ export class DynatraceProvider implements Provider {
   }
 
   private _onFetchFailure(reason: string): void {
-    // providers.md 4.1: SSE still delivers changes; the next poll retries
-    if (this._sseConnected) {
-      this._logger.warn(`poll failed, staying READY because SSE is connected: ${reason}`);
-      return;
-    }
     if (this._state !== 'READY') {
       return;
     }
