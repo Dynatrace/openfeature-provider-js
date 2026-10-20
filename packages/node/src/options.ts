@@ -4,6 +4,7 @@ import type { Logger } from '@openfeature/server-sdk';
 import type { FlagdCore } from '@openfeature/flagd-core';
 import type { FetchFn } from './cdnFetcher.js';
 import type { ServerMetricsFlusher } from './metrics/ServerMetricsFlusher.js';
+import type { EventSourceFactory } from './sseManager.js';
 
 export const DEFAULT_METRICS_FLUSH_INTERVAL_MS = 30_000;
 export const DEFAULT_METRICS_SOFT_CAP_DISTINCT_FLAGS = 1_000;
@@ -25,6 +26,8 @@ export interface ProviderInternals {
   metricsFlusher?: ServerMetricsFlusher;
   gracePeriodMs?: number;
   pollIntervalMs?: number;
+  pollIntervalSseConnectedMs?: number;
+  eventSourceFactory?: EventSourceFactory;
 }
 
 export interface DynatraceProviderOptions {
@@ -32,6 +35,8 @@ export interface DynatraceProviderOptions {
   configOrigin?: string;
   /** Override the metrics origin (scheme, host, and port; no path, query, or fragment). */
   metricsOrigin?: string;
+  /** opt out of SSE; polling then stays at 10s instead of relaxing to 10m */
+  disableSse?: boolean;
   /**
    * Receives provider diagnostics. Defaults to the OpenFeature console logger, which emits
    * `error` and `warn` and drops `info` and `debug`; supply one to capture those levels.
@@ -42,8 +47,11 @@ export interface DynatraceProviderOptions {
 export interface ResolvedProviderOptions {
   sdkKey: string;
   cdnUrl: string;
+  /** origin the CDN URL was built from; fallback for an SSE endpoint without one */
+  configOrigin: string;
   metricsUrl: string;
   publicKey: string;
+  sseEnabled: boolean;
 }
 
 export function resolveProviderOptions(
@@ -69,7 +77,9 @@ export function resolveProviderOptions(
   return {
     sdkKey: trimmedKey,
     cdnUrl,
+    configOrigin: new URL(cdnUrl).origin,
     metricsUrl,
     publicKey: publicKey(trimmedKey),
+    sseEnabled: options.disableSse !== true,
   };
 }

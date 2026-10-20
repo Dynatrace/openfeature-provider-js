@@ -11,17 +11,19 @@ const CONTAINER_STARTUP_TIMEOUT_MS = 60_000;
 const CONTROL_REQUEST_TIMEOUT_MS = 10_000;
 /** HTTP status the mock CDN serves a flag configuration with, and the health check answers with */
 export const HTTP_OK = 200;
+/** the only path the mock server serves an SSE stream on */
+export const SSE_PATH = '/sse';
 
-/** Test harness submodule at the repo root. */
+/** test harness submodule at the repo root */
 export const HARNESS_DIR = new URL('../../../fm-provider-test-harness/', import.meta.url);
 
 let container: Promise<StartedTestContainer> | undefined;
 
-/** Client for the containerized mock CDN, metrics and SSE backend, scripted via its control API. */
+/** client for the containerized mock CDN, metrics and SSE backend, scripted via its control API */
 export class MockServer {
   private constructor(readonly origin: string) {}
 
-  /** Lazily starts the singleton container and returns a client bound to it. */
+  /** lazily starts the singleton container and returns a client bound to it */
   static async get(): Promise<MockServer> {
     if (!container) {
       // pinned to the submodule's version.txt so the image never drifts from the spec; MOCKSERVER_IMAGE overrides
@@ -38,12 +40,12 @@ export class MockServer {
     return new MockServer(`http://${c.getHost()}:${c.getMappedPort(CONTAINER_PORT)}`);
   }
 
-  /** Clears CDN responses, recorded requests and rate-limit state. */
+  /** clears CDN responses, recorded requests and rate-limit state */
   async reset(): Promise<void> {
     await this.sendControlRequest('POST', '/__control__/reset');
   }
 
-  /** Sets the CDN responses in order; each fetch consumes the next, and the last one repeats once exhausted. */
+  /** sets the CDN responses in order; each fetch consumes the next, and the last one repeats once exhausted */
   async setCdnResponses(responses: CdnResponse[]): Promise<void> {
     const body = {
       responses: responses.map((r) => ({
@@ -57,7 +59,7 @@ export class MockServer {
     await this.sendControlRequest('PUT', '/__control__/cdn/responses', JSON.stringify(body));
   }
 
-  /** Fetches the CDN requests received since the last reset, in arrival order. */
+  /** fetches the CDN requests received since the last reset, in arrival order */
   async fetchCdnRequests(): Promise<RecordedRequest[]> {
     const json = JSON.parse(await this.sendControlRequest('GET', '/__control__/cdn/requests')) as {
       requests: { method: string; path: string; headers: Record<string, string>; receivedAtMs: number }[];
@@ -73,12 +75,34 @@ export class MockServer {
     );
   }
 
-  /** Counts the CDN requests received since the last reset. */
+  /** counts the CDN requests received since the last reset */
   async countCdnRequests(): Promise<number> {
     return (await this.fetchCdnRequests()).length;
   }
 
-  /** Sends one control API call and returns its body, failing on a non-2xx answer. */
+  /** counts the SSE subscribers currently connected */
+  async countSseClients(): Promise<number> {
+    return (JSON.parse(await this.sendControlRequest('GET', '/__control__/sse/clients')) as { clients: number })
+      .clients;
+  }
+
+  /** drops every SSE subscriber and refuses new connections for outageMs, or until restoreSse or reset when omitted */
+  async dropSse(outageMs?: number): Promise<void> {
+    const body = outageMs === undefined ? undefined : JSON.stringify({ reconnectSeconds: outageMs / 1_000 });
+    await this.sendControlRequest('POST', '/__control__/sse/disconnect', body);
+  }
+
+  /** ends an outage opened by dropSse, so the next reconnect attempt succeeds */
+  async restoreSse(): Promise<void> {
+    await this.sendControlRequest('POST', '/__control__/sse/disconnect', JSON.stringify({ reconnectSeconds: 0 }));
+  }
+
+  /** broadcasts payload as the data line of an SSE event to every connected subscriber */
+  async emitSse(payload: string): Promise<void> {
+    await this.sendControlRequest('POST', '/__control__/sse/emit', payload);
+  }
+
+  /** sends one control API call and returns its body, failing on a non-2xx answer */
   private async sendControlRequest(method: string, path: string, body?: string): Promise<string> {
     const res = await fetch(this.origin + path, {
       method,
@@ -93,7 +117,7 @@ export class MockServer {
     return text;
   }
 
-  /** Stops the singleton container, if one was started. */
+  /** stops the singleton container, if one was started */
   static async stop(): Promise<void> {
     const c = container;
     container = undefined;
@@ -122,12 +146,12 @@ export class RecordedRequest {
     readonly receivedAtMs: number,
   ) {}
 
-  /** Checks whether the request carried the header, case-insensitively. */
+  /** checks whether the request carried the header, case-insensitively */
   hasHeader(name: string): boolean {
     return this.getHeader(name) !== undefined;
   }
 
-  /** Gets the header's value, case-insensitively; undefined when absent. */
+  /** gets the header's value, case-insensitively; undefined when absent */
   getHeader(name: string): string | undefined {
     return this.headers[name.toLowerCase()];
   }

@@ -13,16 +13,21 @@ import {
   DEFAULT_METRICS_SOFT_CAP_DISTINCT_FLAGS,
   resolveProviderOptions,
 } from './options.js';
-import { PollingManager, DEFAULT_POLL_INTERVAL_MS } from './pollingManager.js';
+import { PollingManager, DEFAULT_POLL_INTERVAL_MS, SSE_CONNECTED_POLL_INTERVAL_MS } from './pollingManager.js';
 import { RetryStrategy } from './retry.js';
+import { SseManager, defaultEventSourceFactory, type EventSourceFactory } from './sseManager.js';
+import { extractSseUrl } from './sse/cdnConfig.js';
+import { SSE_TYPE_REFETCH_CONFIG, type SseMessage } from '../../shared/src/sse/sseMessage.js';
 import { PACKAGE_VERSION } from './version.js';
 
 /** STALE -> ERROR grace period (not user-configurable per spec). */
 export const GRACE_PERIOD_MS = 60_000;
 
+const MS_PER_SECOND = 1_000;
+
 type ProviderState = 'NOT_READY' | 'READY' | 'STALE' | 'ERROR';
 
-/** Dynatrace OpenFeature server provider for Node.js: flagd config from the fm-service CDN, in-process eval via flagd-core, 10s polling with READY -> STALE -> ERROR transitions. */
+/** Dynatrace OpenFeature server provider for Node.js: CDN config, in-process flagd eval, SSE, polling */
 export class DynatraceProvider implements Provider {
   public readonly metadata = { name: 'dynatrace' } as const;
   public readonly runsOn = 'server' as const;
@@ -37,6 +42,8 @@ export class DynatraceProvider implements Provider {
   private readonly _metricsFlusher: ServerMetricsFlusher;
   private readonly _gracePeriodMs: number;
   private readonly _pollIntervalMs: number;
+  private readonly _pollIntervalSseConnectedMs: number;
+  private readonly _createEventSource: EventSourceFactory;
 
   private _state: ProviderState = 'NOT_READY';
   private _shutdown = false;
@@ -44,6 +51,8 @@ export class DynatraceProvider implements Provider {
   private _closing: Promise<void> | undefined;
   private _graceTimer: ReturnType<typeof setTimeout> | undefined;
   private _pollingManager: PollingManager | undefined;
+  private _sseManager: SseManager | undefined;
+  private _sseConnected = false;
 
   constructor(sdkKey: string, options?: DynatraceProviderOptions);
   /** @internal Test seam; stripped from the published declarations. */
@@ -83,6 +92,8 @@ export class DynatraceProvider implements Provider {
     ];
     this._gracePeriodMs = internals?.gracePeriodMs ?? GRACE_PERIOD_MS;
     this._pollIntervalMs = internals?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    this._pollIntervalSseConnectedMs = internals?.pollIntervalSseConnectedMs ?? SSE_CONNECTED_POLL_INTERVAL_MS;
+    this._createEventSource = internals?.eventSourceFactory ?? defaultEventSourceFactory;
   }
 
   async initialize(_context?: EvaluationContext): Promise<void> {
@@ -90,6 +101,8 @@ export class DynatraceProvider implements Provider {
     const generation = ++this._generation;
     this._shutdown = false;
     this._closing = undefined;
+    // drop a previous lifecycle's stream before anything can connect
+    this._stopSse();
     // A fresh lifecycle re-fetches in full; the previous validators would earn a 304 init cannot accept.
     this._fetcher.reset();
 
@@ -136,6 +149,7 @@ export class DynatraceProvider implements Provider {
     this._fetcher.commit();
 
     this._updateMetricsVersionFromFlagSet();
+    this._syncSse(body);
 
     this._state = 'READY';
     this._logger.info(`initialized; polling ${this._options.cdnUrl} every ${this._pollIntervalMs}ms`);
@@ -152,11 +166,16 @@ export class DynatraceProvider implements Provider {
         emitChange: (changedKeys) => this._emitConfigurationChanged(changedKeys),
         emitSuccess: () => this._onFetchSuccess(),
         emitFailure: (reason) => this._onFetchFailure(reason),
+        isNewerThanApplied: (lastModifiedMs) => this._fetcher.isNewerThanCommitted(lastModifiedMs),
       },
       this._pollIntervalMs,
       this._logger,
     );
     this._pollingManager.start();
+    // stream may have opened before this manager existed
+    if (this._sseConnected) {
+      this._pollingManager.setIntervalMs(this._pollIntervalSseConnectedMs);
+    }
     this._metricsFlusher.start();
   }
 
@@ -181,6 +200,8 @@ export class DynatraceProvider implements Provider {
     this._shutdown = true;
 
     this._logger.info('shutting down');
+    // stream first (providers.md 6.1)
+    this._stopSse();
     this._pollingManager?.stop();
     this._pollingManager = undefined;
     this._cancelGraceTimer();
@@ -275,6 +296,7 @@ export class DynatraceProvider implements Provider {
     this._metricsFlusher.triggerFlush();
     const changedKeys = this._flagdCore.setConfigurations(json);
     this._updateMetricsVersionFromFlagSet();
+    this._syncSse(json);
     return changedKeys;
   }
 
@@ -284,6 +306,94 @@ export class DynatraceProvider implements Provider {
     // than attributing new evaluations to the version the previous config carried.
     const usable = typeof version === 'string' || typeof version === 'number';
     this._metricsAggregator.setVersion(usable ? version : undefined);
+  }
+
+  /** follows the stream the accepted config advertises; the URL can rotate (providers.md 1.5) */
+  private _syncSse(configJson: string): void {
+    if (!this._options.sseEnabled) {
+      return;
+    }
+
+    const url = extractSseUrl(configJson, this._options.configOrigin);
+
+    if (!url) {
+      if (this._sseManager) {
+        this._logger.info('config no longer advertises an SSE stream; falling back to polling only');
+        this._stopSse();
+      } else {
+        this._logger.info('config advertises no SSE stream; polling only');
+      }
+      return;
+    }
+
+    if (this._sseManager?.url === url) {
+      return;
+    }
+
+    if (this._sseManager) {
+      this._logger.info('SSE stream URL rotated; reconnecting');
+      this._stopSse();
+    }
+
+    const manager = new SseManager(
+      url,
+      {
+        onConnected: () => this._onSseConnected(),
+        onDisconnected: () => this._onSseDisconnected(),
+        onMessage: (message) => this._onSseMessage(message),
+      },
+      this._createEventSource,
+      this._logger,
+    );
+    this._sseManager = manager;
+
+    try {
+      manager.start();
+    } catch (err) {
+      // not fatal; polling still carries changes
+      manager.stop();
+      this._sseManager = undefined;
+      this._logger.warn(
+        `failed to open the SSE connection; falling back to polling only: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  private _stopSse(): void {
+    this._sseManager?.stop();
+    this._sseManager = undefined;
+    this._sseConnected = false;
+    this._pollingManager?.setIntervalMs(this._pollIntervalMs);
+  }
+
+  /** SSE only sets the poll cadence; provider state follows fetch outcomes (providers.md 4.1) */
+  private _onSseConnected(): void {
+    this._sseConnected = true;
+    this._logger.info(`SSE connected; poll interval relaxed to ${this._pollIntervalSseConnectedMs}ms`);
+    this._pollingManager?.setIntervalMs(this._pollIntervalSseConnectedMs);
+    // catch up on anything missed while down
+    this._pollingManager?.requestOutOfBandFetch();
+  }
+
+  private _onSseDisconnected(): void {
+    if (!this._sseConnected) {
+      return;
+    }
+    this._sseConnected = false;
+    this._logger.warn(`SSE disconnected; poll interval tightened to ${this._pollIntervalMs}ms`);
+    this._pollingManager?.setIntervalMs(this._pollIntervalMs);
+  }
+
+  private _onSseMessage(message: SseMessage): void {
+    if (message.type !== SSE_TYPE_REFETCH_CONFIG) {
+      this._logger.debug(`ignoring SSE message of type '${message.type}'`);
+      return;
+    }
+
+    // never dropped up front: second-precision timestamps can tie, and the conditional GET is cheap
+    const announcedMs =
+      message.lastModifiedSeconds !== undefined ? message.lastModifiedSeconds * MS_PER_SECOND : undefined;
+    this._pollingManager?.requestOutOfBandFetch(announcedMs);
   }
 
   private _onFetchSuccess(): void {

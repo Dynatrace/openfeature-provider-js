@@ -8,6 +8,8 @@ The provider evaluates flags in-process: on initialization it fetches your flag 
 
 ## Installation
 
+Requires Node.js 22.12 or later.
+
 ```bash
 npm install @dynatrace/openfeature-provider-node @openfeature/server-sdk
 ```
@@ -42,11 +44,33 @@ const provider = new DynatraceProvider(sdkKey, {
 });
 ```
 
-| Option          | Type     | Default              | Description                                                          |
-| --------------- | -------- | -------------------- | -------------------------------------------------------------------- |
-| `configOrigin`  | `string` | derived from SDK key | Override the flag configuration origin.                              |
-| `metricsOrigin` | `string` | derived from SDK key | Override the evaluation metrics ingest origin.                       |
-| `logger`        | `Logger` | console (warn/error) | Receives provider diagnostics. The default drops `info` and `debug`. |
+| Option          | Type      | Default              | Description                                                          |
+| --------------- | --------- | -------------------- | -------------------------------------------------------------------- |
+| `configOrigin`  | `string`  | derived from SDK key | Override the flag configuration origin.                              |
+| `metricsOrigin` | `string`  | derived from SDK key | Override the evaluation metrics ingest origin.                       |
+| `logger`        | `Logger`  | console (warn/error) | Receives provider diagnostics. The default drops `info` and `debug`. |
+| `disableSse`    | `boolean` | `false`              | Opt out of streamed change notifications and rely on polling alone.  |
+
+## Staying up to date
+
+The provider keeps its configuration current two ways at once:
+
+- **Change notifications.** It opens a Server-Sent Events connection to the stream your
+  configuration advertises, and re-fetches as soon as a change is announced. The connection
+  reconnects on its own, and the provider follows the stream URL if it is rotated.
+- **Polling.** A conditional `GET` against the CDN runs every 10 seconds. While the notification
+  stream is connected this relaxes to 10 minutes, since it is only a safety net; it tightens back
+  to 10 seconds whenever the stream is down or disabled.
+
+Neither interval is configurable. Set `disableSse: true` to skip the stream entirely; polling then
+stays at its 10 second cadence, so changes still arrive, just less promptly.
+
+The open connection keeps the Node event loop alive for as long as the provider is registered.
+Closing it is part of a normal shutdown:
+
+```ts
+await OpenFeature.close();
+```
 
 ## Examples
 
