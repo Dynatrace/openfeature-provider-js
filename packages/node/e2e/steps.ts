@@ -149,8 +149,9 @@ Given(
 );
 
 Given(
-  /^an initialized, READY provider serving the "([^"]*)" flag configuration(?: with "([^"]*)" header "([^"]*)")?$/,
-  async (name: string, header?: string, value?: string) => {
+  /^an initialized, READY provider serving the "([^"]*)" flag configuration(?: with "([^"]*)" header ("[^"]*"|'[^']*'))?$/,
+  async (name: string, header?: string, quotedValue?: string) => {
+    const value = quotedValue && unquote(quotedValue);
     sdkKey = BASE_KEY;
     await setCdnResponses([
       { status: HTTP_OK, body: loadFlagConfig(name), headers: header ? { [header]: value ?? '' } : undefined },
@@ -366,8 +367,9 @@ Then(/^the initial CDN request has no "([^"]*)" header$/, async (header: string)
 });
 
 Then(
-  /^the (\d+)\. CDN request has the "([^"]*)" header "([^"]*)"$/,
-  async (index: number, header: string, value: string) => {
+  /^the (\d+)\. CDN request has the "([^"]*)" header ("[^"]*"|'[^']*')$/,
+  async (index: number, header: string, quotedValue: string) => {
+    const value = unquote(quotedValue);
     const request = await getNthCdnRequest(index - 1);
     expect(request.hasHeader(header), `${index}. CDN request missing expected header: ${header}`).toBe(true);
     expect(request.getHeader(header), `${index}. CDN request ${header} header mismatch`).toBe(value);
