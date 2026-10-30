@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-node-v0.1.0-alpha...openfeature-provider-node-v0.2.0-alpha) (2026-10-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* update flagd-core to the latest major ([#47](https://github.com/Dynatrace/openfeature-provider-js/issues/47))
+
+### ✨ New Features
+
+* add SSE change notifications to the node provider ([#37](https://github.com/Dynatrace/openfeature-provider-js/issues/37)) ([d86af5a](https://github.com/Dynatrace/openfeature-provider-js/commit/d86af5abf9deac1ab6e67779836855f4dc8deff1))
+* update flagd-core to the latest major ([#47](https://github.com/Dynatrace/openfeature-provider-js/issues/47)) ([55a9232](https://github.com/Dynatrace/openfeature-provider-js/commit/55a9232d3335895c0c888a2bc0350a6a8296f8f5))
+
+
+### 🐛 Bug Fixes
+
+* expose ./package.json in package exports ([#40](https://github.com/Dynatrace/openfeature-provider-js/issues/40)) ([afae7b9](https://github.com/Dynatrace/openfeature-provider-js/commit/afae7b923ebb8523e7089b6c231fc087cc8a5435))
+
 ## [0.1.0-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-node-v0.0.1-alpha...openfeature-provider-node-v0.1.0-alpha) (2026-09-25)
 
 
