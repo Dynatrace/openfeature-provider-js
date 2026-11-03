@@ -369,9 +369,8 @@ export class DynatraceProvider implements Provider {
   /** SSE only sets the poll cadence; provider state follows fetch outcomes (providers.md 4.1) */
   private _onSseConnected(): void {
     this._sseConnected = true;
-    this._logger.info(`SSE connected; poll interval relaxed to ${this._pollIntervalSseConnectedMs}ms`);
-    this._pollingManager?.setIntervalMs(this._pollIntervalSseConnectedMs);
-    // catch up on anything missed while down
+    this._logger.info('SSE connected');
+    // catch up on anything missed while down; its success relaxes the cadence
     this._pollingManager?.requestOutOfBandFetch();
   }
 
@@ -397,6 +396,9 @@ export class DynatraceProvider implements Provider {
   }
 
   private _onFetchSuccess(): void {
+    if (this._sseConnected) {
+      this._pollingManager?.setIntervalMs(this._pollIntervalSseConnectedMs);
+    }
     this._cancelGraceTimer();
     // NOT_READY is reachable: a failed init leaves the poller running, so the first good tick makes us usable.
     if (this._state !== 'READY') {
@@ -406,6 +408,8 @@ export class DynatraceProvider implements Provider {
   }
 
   private _onFetchFailure(reason: string): void {
+    // fetch at the fast cadence until one succeeds, even with SSE connected
+    this._pollingManager?.setIntervalMs(this._pollIntervalMs);
     if (this._state !== 'READY') {
       return;
     }

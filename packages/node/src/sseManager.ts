@@ -25,6 +25,7 @@ export const reconnectingFetch: FetchLike = async (url, init) => {
 
 // bridges handler variance between the structural type and the class
 export const defaultEventSourceFactory: EventSourceFactory = (url) =>
+  // no read timeout option; undici's 300s body timeout stands in for 150s
   new EventSource(url, { fetch: reconnectingFetch }) as SseEventSource;
 
 export interface SseCallbacks {
