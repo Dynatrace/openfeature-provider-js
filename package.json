@@ -42,7 +42,7 @@
     "@openfeature/web-sdk": "^1.10.0",
     "esbuild": "^0.28.2",
     "husky": "^9.1.7",
-    "jsdom": "^29.1.1",
+    "jsdom": "^31.0.1",
     "lint-staged": "^17.6.0",
     "prettier": "^3.10.1",
     "rollup": "^4.68.3",
