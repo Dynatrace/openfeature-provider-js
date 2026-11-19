@@ -61,6 +61,19 @@ describe('DynatraceProvider', () => {
     expect(new DynatraceProvider(VALID_SERVER_KEY).runsOn).toBe('server');
   });
 
+  it('reads the SDK key and origins from env vars when omitted', () => {
+    const env: Record<string, string> = {
+      DT_FM_SDK_KEY: VALID_SERVER_KEY,
+      DT_FM_CONFIG_ORIGIN: 'https://cdn.example.com',
+    };
+    const provider = new DynatraceProvider(undefined, undefined, { env: (name) => env[name] });
+    expect(provider.cdnUrl).toBe(`https://cdn.example.com/server/${VALID_SERVER_KEY}.json`);
+  });
+
+  it('fails construction without an SDK key in code or env', () => {
+    expect(() => new DynatraceProvider(undefined, undefined, { env: () => undefined })).toThrow('DT_FM_SDK_KEY');
+  });
+
   it('returns PROVIDER_NOT_READY before initialize', async () => {
     const provider = new DynatraceProvider(VALID_SERVER_KEY);
     const result = await provider.resolveBooleanEvaluation('my-bool', false, { targetingKey: 'u1' }, logger);
