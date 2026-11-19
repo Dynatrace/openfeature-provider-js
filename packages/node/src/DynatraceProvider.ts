@@ -54,11 +54,15 @@ export class DynatraceProvider implements Provider {
   private _sseManager: SseManager | undefined;
   private _sseConnected = false;
 
-  constructor(sdkKey: string, options?: DynatraceProviderOptions);
+  /**
+   * @param sdkKey Server SDK key; falls back to the `DT_FM_SDK_KEY` env var when omitted.
+   * @param options Overrides; each unset option falls back to its `DT_FM_*` env var.
+   */
+  constructor(sdkKey?: string, options?: DynatraceProviderOptions);
   /** @internal Test seam; stripped from the published declarations. */
-  constructor(sdkKey: string, options: DynatraceProviderOptions | undefined, internals: ProviderInternals);
-  constructor(sdkKey: string, options?: DynatraceProviderOptions, internals?: ProviderInternals) {
-    this._options = resolveProviderOptions(sdkKey, options);
+  constructor(sdkKey: string | undefined, options: DynatraceProviderOptions | undefined, internals: ProviderInternals);
+  constructor(sdkKey?: string, options?: DynatraceProviderOptions, internals?: ProviderInternals) {
+    this._options = resolveProviderOptions(sdkKey, options, internals?.env);
     this._logger = resolveLogger(options?.logger, this._options.sdkKey);
 
     this._flagdCore = internals?.flagdCore ?? new FlagdCore();

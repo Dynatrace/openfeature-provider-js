@@ -51,6 +51,22 @@ const provider = new DynatraceProvider(sdkKey, {
 | `logger`        | `Logger`  | console (warn/error) | Receives provider diagnostics. The default drops `info` and `debug`. |
 | `disableSse`    | `boolean` | `false`              | Opt out of streamed change notifications and rely on polling alone.  |
 
+The SDK key and options can also be set with environment variables. A value set in code wins over the environment variable, which wins over the default; empty values count as unset.
+
+| Environment variable   | Option          | Format           |
+| ---------------------- | --------------- | ---------------- |
+| `DT_FM_SDK_KEY`        | SDK key         | string           |
+| `DT_FM_CONFIG_ORIGIN`  | `configOrigin`  | URL origin       |
+| `DT_FM_METRICS_ORIGIN` | `metricsOrigin` | URL origin       |
+| `DT_FM_SSE_DISABLED`   | `disableSse`    | `true` / `false` |
+
+> **Note:** if `configOrigin` is set, carefully consider whether `metricsOrigin` should be set too; an SDK proxy or custom host typically serves both.
+
+```ts
+// reads DT_FM_SDK_KEY and any other DT_FM_* variables
+const provider = new DynatraceProvider();
+```
+
 ## Staying up to date
 
 The provider keeps its configuration current two ways at once:
