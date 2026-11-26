@@ -122,10 +122,6 @@ After(async () => {
 });
 
 Given('a mock server is running', () => {
-  sseEnabled = false;
-});
-
-Given('a mock server with SSE enabled is running', () => {
   sseEnabled = true;
 });
 
