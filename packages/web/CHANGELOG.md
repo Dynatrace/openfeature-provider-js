@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.1-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.3.0-alpha...openfeature-provider-web-v0.3.1-alpha) (2026-11-26)
+
+
+### ✨ New Features
+
+* add SSE change notifications to the node provider ([#37](https://github.com/Dynatrace/openfeature-provider-js/issues/37)) ([d86af5a](https://github.com/Dynatrace/openfeature-provider-js/commit/d86af5abf9deac1ab6e67779836855f4dc8deff1))
+
+
+### 🐛 Bug Fixes
+
+* **deps:** Bump the minor-and-patch group with 11 updates ([#56](https://github.com/Dynatrace/openfeature-provider-js/issues/56)) ([00f3040](https://github.com/Dynatrace/openfeature-provider-js/commit/00f30400e5877313a45496ec48dcea83c7beaf6d))
+* expose ./package.json in package exports ([#40](https://github.com/Dynatrace/openfeature-provider-js/issues/40)) ([afae7b9](https://github.com/Dynatrace/openfeature-provider-js/commit/afae7b923ebb8523e7089b6c231fc087cc8a5435))
+
+
+### 🧹 Chore
+
+* **deps-dev:** Bump vite from 8.0.16 to 8.1.6 in /packages/web/examples/react-app ([#44](https://github.com/Dynatrace/openfeature-provider-js/issues/44)) ([c8590e3](https://github.com/Dynatrace/openfeature-provider-js/commit/c8590e38f7d5640dfc1b93a4bfd06f169406a9fc))
+* **deps:** Bump the react-app-minor-and-patch group in /packages/web/examples/react-app with 7 updates ([#54](https://github.com/Dynatrace/openfeature-provider-js/issues/54)) ([0efd668](https://github.com/Dynatrace/openfeature-provider-js/commit/0efd668af915f6e217baab97493e8dc64333bdd6))
+
+
+### 📚 Documentation
+
+* align READMEs with the standard provider format ([#32](https://github.com/Dynatrace/openfeature-provider-js/issues/32)) ([b7b8bfc](https://github.com/Dynatrace/openfeature-provider-js/commit/b7b8bfc7c1d5959a1d99ddbc02761c429f625760))
+
 ## [0.3.0-alpha](https://github.com/Dynatrace/openfeature-provider-js/compare/openfeature-provider-web-v0.2.7-alpha...openfeature-provider-web-v0.3.0-alpha) (2026-08-27)
 
 
